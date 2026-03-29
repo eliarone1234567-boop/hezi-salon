@@ -1,4 +1,3 @@
-
 import express from "express";
 import cors from "cors";
 import { google } from "googleapis";
@@ -9,18 +8,24 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// 🔐 פרטי OAuth שלך
-const CLIENT_ID = "שים כאן את ה-CLIENT ID שלך";
-const CLIENT_SECRET = "שים כאן את ה-CLIENT SECRET שלך";
-const REDIRECT_URI = "http://localhost:3000";
+// 🔐 משתנים מה-Render (לא לשים סודות בקוד!)
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REDIRECT_URI = "https://hezi-salon.onrender.com/oauth2callback";
 
+// יצירת OAuth client
 const oAuth2Client = new google.auth.OAuth2(
   CLIENT_ID,
   CLIENT_SECRET,
   REDIRECT_URI
 );
 
-// 🔗 קישור התחברות לגוגל
+// בדיקה שהשרת עובד
+app.get("/", (req, res) => {
+  res.send("Hezi Salon System Running 🚀");
+});
+
+// שלב התחברות לגוגל
 app.get("/auth", (req, res) => {
   const url = oAuth2Client.generateAuthUrl({
     access_type: "offline",
@@ -30,30 +35,43 @@ app.get("/auth", (req, res) => {
   res.send(`<a href="${url}">התחבר ליומן גוגל</a>`);
 });
 
-// 🎯 קבלת טוקן
+// חזרה מגוגל אחרי התחברות
 app.get("/oauth2callback", async (req, res) => {
-  const code = req.query.code;
-  const { tokens } = await oAuth2Client.getToken(code);
-  oAuth2Client.setCredentials(tokens);
+  try {
+    const code = req.query.code;
 
-  res.send("מחובר ליומן בהצלחה!");
+    const { tokens } = await oAuth2Client.getToken(code);
+    oAuth2Client.setCredentials(tokens);
+
+    res.send("התחברת בהצלחה ליומן 🎉");
+  } catch (err) {
+    console.error(err);
+    res.send("שגיאה בהתחברות");
+  }
 });
 
-// 📅 שליפת אירועים
+// משיכת אירועים מהיומן
 app.get("/events", async (req, res) => {
-  const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
+  try {
+    const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
 
-  const response = await calendar.events.list({
-    calendarId: "primary",
-    timeMin: new Date().toISOString(),
-    maxResults: 10,
-    singleEvents: true,
-    orderBy: "startTime",
-  });
+    const response = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: new Date().toISOString(),
+      maxResults: 10,
+      singleEvents: true,
+      orderBy: "startTime",
+    });
 
-  res.json(response.data.items);
+    res.json(response.data.items);
+  } catch (err) {
+    console.error(err);
+    res.send("שגיאה בקבלת אירועים");
+  }
 });
 
+// הפעלת השרת
 app.listen(port, () => {
   console.log(`Server running on ${port}`);
 });
+
