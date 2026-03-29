@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>חזי עיצוב שיער - מסך ניהול</title>
+  <style>
+    :root{
+      --bg:#f7f4ef; --card:#fff; --text:#171717; --muted:#786f66; --line:#e7ddd1;
+      --gold:#ab8a56; --gold2:#8b6b3c; --green:#147a4f; --blue:#2267d8; --red:#b42318;
+      --shadow:0 14px 34px rgba(27,20,15,.08);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;font-family:Arial,sans-serif;background:linear-gradient(180deg,#fbf9f6 0%,#f2ece4 100%);
+      color:var(--text)
+    }
+    .wrap{max-width:1280px;margin:0 auto;padding:18px 14px 80px}
+    .hero{
+      background:linear-gradient(135deg,#060606 0%,#2b2119 100%);color:#fff;border-radius:28px;padding:24px 22px;
+      box-shadow:var(--shadow);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px
+    }
+    .brand{display:flex;gap:14px;align-items:center}
+    .logo{width:82px;height:82px;border-radius:22px;background:#181818;color:#f2d7a0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:28px}
+    .hero h1{margin:0 0 6px}
+    .hero p{margin:0;color:#eadcc7}
+    .chip{display:inline-block;margin-top:10px;padding:8px 14px;border-radius:999px;background:rgba(171,138,86,.18);color:#f5dfb7;border:1px solid rgba(255,255,255,.08);font-size:13px;font-weight:700}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{border:0;border-radius:14px;padding:12px 16px;font-weight:800;cursor:pointer;font-size:15px}
+    .gold{background:var(--gold);color:#fff}.dark{background:#fff;color:#111}.light{background:#f7f2eb;color:#111;border:1px solid var(--line)}
+    .blue{background:var(--blue);color:#fff}.green{background:var(--green);color:#fff}.red{background:var(--red);color:#fff}
+    .small{padding:8px 10px;font-size:13px;border-radius:12px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+    .stat{background:#fff;border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--shadow);text-align:center}
+    .stat b{display:block;font-size:24px;margin-bottom:4px}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+    .tab{background:#fff;border:1px solid var(--line);border-radius:999px;padding:10px 16px;cursor:pointer;font-weight:800}
+    .tab.active{background:var(--gold);color:#fff;border-color:var(--gold)}
+    .view{display:none}.view.active{display:block}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+    .card{grid-column:span 12;background:#fff;border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow)}
+    @media(min-width:980px){.span-5{grid-column:span 5}.span-7{grid-column:span 7}.span-6{grid-column:span 6}}
+    @media(max-width:980px){.stats{grid-template-columns:repeat(2,1fr)}}
+    h2{margin:0 0 10px;font-size:22px}
+    .sub{color:var(--muted);font-size:14px;margin-top:-4px;margin-bottom:12px}
+    .toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+    input,select,textarea{
+      width:100%;padding:12px 13px;border:1px solid #ddd3c7;border-radius:14px;background:#fff;font:inherit
+    }
+    textarea{min-height:90px;resize:vertical}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .full{grid-column:1/-1}
+    @media(max-width:760px){.form-grid{grid-template-columns:1fr}}
+    .list{display:flex;flex-direction:column;gap:10px}
+    .item{border:1px solid var(--line);border-radius:18px;padding:13px;background:#fdfcfb}
+    .item-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+    .name{font-weight:900;font-size:17px}
+    .meta{color:var(--muted);font-size:14px;line-height:1.6}
+    .badges{display:flex;gap:7px;flex-wrap:wrap}
+    .badge{display:inline-block;padding:7px 10px;border-radius:999px;background:#f1e6d7;color:#6b5025;font-size:12px;font-weight:800}
+    .empty{border:1px dashed #cfbfad;background:#fffcf8;color:var(--muted);border-radius:18px;padding:18px;text-align:center}
+    .search{max-width:320px;width:100%}
+    .note{background:linear-gradient(180deg,#fffdf8 0%,#faf4ea 100%);border:1px solid #eadcc6;border-radius:18px;padding:14px;line-height:1.65}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="brand">
+        <div class="logo">HD</div>
+        <div>
+          <h1>חזי עיצוב שיער</h1>
+          <p>מסך ניהול מקצועי ללקוחות, תורים, שירותים ומבצעים</p>
+          <div class="chip">מחובר לשרת Render שלך</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn gold" onclick="loadSample()">טען נתוני דוגמה</button>
+        <button class="btn dark" onclick="refreshAll()">רענן נתונים</button>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><b id="clientsCount">0</b>לקוחות</div>
+      <div class="stat"><b id="appointmentsCount">0</b>תורים</div>
+      <div class="stat"><b id="todayCount">0</b>להיום</div>
+      <div class="stat"><b id="incomeCount">₪0</b>הכנסות</div>
+    </section>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showView('clients', this)">לקוחות</button>
+      <button class="tab" onclick="showView('appointments', this)">תורים</button>
+      <button class="tab" onclick="showView('business', this)">שירותים ומבצעים</button>
+    </div>
+
+    <section id="view-clients" class="view active">
+      <div class="grid">
+        <section class="card span-5">
+          <h2>לקוח חדש</h2>
+          <div class="sub">הוספת לקוח למערכת</div>
+          <div class="form-grid">
+            <input id="clientName" placeholder="שם הלקוח">
+            <input id="clientPhone" placeholder="טלפון">
+            <input id="clientBirthday" type="date">
+            <input id="clientPreference" placeholder="העדפה / שירות קבוע">
+            <textarea id="clientNotes" class="full" placeholder="הערות"></textarea>
+            <button class="btn gold full" onclick="addClient()">שמור לקוח</button>
+          </div>
+        </section>
+        <section class="card span-7">
+          <div class="toolbar">
+            <div><h2>רשימת לקוחות</h2><div class="sub">לקוחות שמורים במערכת</div></div>
+            <input class="search" id="clientSearch" placeholder="חיפוש לפי שם או טלפון" oninput="renderClients()">
+          </div>
+          <div id="clientsList" class="list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-appointments" class="view">
+      <div class="grid">
+        <section class="card span-5">
+          <h2>תור חדש</h2>
+          <div class="sub">קביעת תור ללקוח</div>
+          <div class="form-grid">
+            <select id="appointmentClient"></select>
+            <select id="appointmentService"></select>
+            <input id="appointmentDate" type="date">
+            <input id="appointmentTime" type="time">
+            <select id="appointmentReminder">
+              <option value="כן">תזכורת: כן</option>
+              <option value="לא">תזכורת: לא</option>
+            </select>
+            <select id="appointmentStatus">
+              <option value="נקבע">סטטוס: נקבע</option>
+              <option value="הגיע">סטטוס: הגיע</option>
+              <option value="לא הגיע">סטטוס: לא הגיע</option>
+            </select>
+            <textarea id="appointmentNote" class="full" placeholder="הערות"></textarea>
+            <button class="btn gold full" onclick="addAppointment()">שמור תור</button>
+          </div>
+        </section>
+        <section class="card span-7">
+          <div class="toolbar">
+            <div><h2>כל התורים</h2><div class="sub">ניהול סטטוס תורים</div></div>
+          </div>
+          <div id="appointmentsList" class="list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-business" class="view">
+      <div class="grid">
+        <section class="card span-6">
+          <h2>שירות חדש</h2>
+          <div class="sub">ניהול שירותי המספרה</div>
+          <div class="form-grid">
+            <input id="serviceName" placeholder="שם השירות">
+            <input id="servicePrice" type="number" placeholder="מחיר">
+            <input id="serviceDuration" type="number" placeholder="משך בדקות">
+            <input id="serviceCategory" placeholder="קטגוריה">
+            <textarea id="serviceDesc" class="full" placeholder="תיאור קצר"></textarea>
+            <button class="btn gold full" onclick="addService()">שמור שירות</button>
+          </div>
+          <div style="height:12px"></div>
+          <div id="servicesList" class="list"></div>
+        </section>
+        <section class="card span-6">
+          <h2>מוצר / מבצע חדש</h2>
+          <div class="sub">ניהול מוצרים ומבצעים</div>
+          <div class="form-grid">
+            <input id="productName" placeholder="שם מוצר / מבצע">
+            <input id="productPrice" placeholder="מחיר / הטבה">
+            <input id="productCategory" placeholder="קטגוריה">
+            <input id="productStock" placeholder="מלאי / תוקף">
+            <textarea id="productDesc" class="full" placeholder="תיאור קצר"></textarea>
+            <button class="btn gold full" onclick="addProduct()">שמור מוצר / מבצע</button>
+          </div>
+          <div style="height:12px"></div>
+          <div id="productsList" class="list"></div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+<script>
+const API_BASE = 'https://hezi-salon.onrender.com';
+let db = { clients: [], appointments: [], services: [], products: [] };
+
+function showView(name, el){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+function formatMoney(n){ return '₪' + Number(n || 0).toLocaleString('he-IL'); }
+function todayISO(){ const d = new Date(); const tz = new Date(d.getTime() - d.getTimezoneOffset()*60000); return tz.toISOString().slice(0,10); }
+function clientNameById(id){ const c = db.clients.find(x => x.id === id); return c ? c.name : 'לקוח'; }
+function serviceNameById(id){ const s = db.services.find(x => x.id === id); return s ? s.name : 'שירות'; }
+function servicePriceById(id){ const s = db.services.find(x => x.id === id); return Number(s && s.price ? s.price : 0); }
+
+async function api(path, options = {}){
+  const res = await fetch(API_BASE + path, options);
+  if(!res.ok){
+    const text = await res.text();
+    throw new Error(text || 'request failed');
+  }
+  const type = res.headers.get('content-type') || '';
+  if(type.includes('application/json')) return await res.json();
+  return await res.text();
+}
+
+async function refreshAll(){
+  const [clients, appointments] = await Promise.all([
+    api('/clients').catch(() => []),
+    api('/appointments').catch(() => [])
+  ]);
+  db.clients = Array.isArray(clients) ? clients : [];
+  db.appointments = Array.isArray(appointments) ? appointments : [];
+  renderAll();
+}
+
+async function loadSample(){
+  db.clients = [
+    {id:'c1', name:'ריטה', phone:'050-1234567', birthday:'', preference:'פן', notes:'מעדיפה שעות בוקר'},
+    {id:'c2', name:'סילבי', phone:'052-7654321', birthday:'', preference:'צבע שורש', notes:'מגיעה כל 3 שבועות'}
+  ];
+  db.services = [
+    {id:'s1', name:'תספורת', price:100, duration:30, category:'נשים/גברים', desc:'תספורת מדויקת'},
+    {id:'s2', name:'פן', price:80, duration:35, category:'סטיילינג', desc:'פן חלק או גלי'},
+    {id:'s3', name:'צבע שורש', price:220, duration:75, category:'צבע', desc:'חידוש צבע שורש'}
+  ];
+  db.products = [
+    {id:'p1', name:'שמפו לשיער צבוע', price:'₪89', category:'מוצר', stock:'במלאי', desc:'שומר על צבע וברק'}
+  ];
+  db.appointments = [
+    {id:'a1', clientId:'c1', serviceId:'s2', date:todayISO(), time:'10:30', reminder:'כן', status:'נקבע', note:'לאשר בוואטסאפ'}
+  ];
+  renderAll();
+}
+
+async function addClient(){
+  const payload = {
+    name: document.getElementById('clientName').value.trim(),
+    phone: document.getElementById('clientPhone').value.trim()
+  };
+  if(!payload.name || !payload.phone){ alert('יש למלא שם וטלפון'); return; }
+  await api('/clients', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  document.getElementById('clientName').value = '';
+  document.getElementById('clientPhone').value = '';
+  document.getElementById('clientBirthday').value = '';
+  document.getElementById('clientPreference').value = '';
+  document.getElementById('clientNotes').value = '';
+  await refreshAll();
+}
+
+async function addAppointment(){
+  const payload = {
+    clientId: document.getElementById('appointmentClient').value,
+    serviceId: document.getElementById('appointmentService').value,
+    date: document.getElementById('appointmentDate').value,
+    time: document.getElementById('appointmentTime').value,
+    reminder: document.getElementById('appointmentReminder').value,
+    status: document.getElementById('appointmentStatus').value,
+    note: document.getElementById('appointmentNote').value.trim()
+  };
+  if(!payload.clientId || !payload.date || !payload.time){ alert('יש לבחור לקוח, תאריך ושעה'); return; }
+  await api('/appointments', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  document.getElementById('appointmentDate').value = '';
+  document.getElementById('appointmentTime').value = '';
+  document.getElementById('appointmentNote').value = '';
+  await refreshAll();
+}
+
+function addService(){
+  const service = {
+    id: 's' + Date.now(),
+    name: document.getElementById('serviceName').value.trim(),
+    price: document.getElementById('servicePrice').value.trim(),
+    duration: document.getElementById('serviceDuration').value.trim(),
+    category: document.getElementById('serviceCategory').value.trim(),
+    desc: document.getElementById('serviceDesc').value.trim()
+  };
+  if(!service.name){ alert('יש למלא שם שירות'); return; }
+  db.services.unshift(service);
+  document.getElementById('serviceName').value = '';
+  document.getElementById('servicePrice').value = '';
+  document.getElementById('serviceDuration').value = '';
+  document.getElementById('serviceCategory').value = '';
+  document.getElementById('serviceDesc').value = '';
+  renderAll();
+}
+
+function addProduct(){
+  const product = {
+    id: 'p' + Date.now(),
+    name: document.getElementById('productName').value.trim(),
+    price: document.getElementById('productPrice').value.trim(),
+    category: document.getElementById('productCategory').value.trim(),
+    stock: document.getElementById('productStock').value.trim(),
+    desc: document.getElementById('productDesc').value.trim()
+  };
+  if(!product.name){ alert('יש למלא שם מוצר'); return; }
+  db.products.unshift(product);
+  document.getElementById('productName').value = '';
+  document.getElementById('productPrice').value = '';
+  document.getElementById('productCategory').value = '';
+  document.getElementById('productStock').value = '';
+  document.getElementById('productDesc').value = '';
+  renderAll();
+}
+
+async function updateAppointmentStatus(id, status){
+  try{
+    await api('/appointments/' + id + '/status', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ status })
+    });
+    await refreshAll();
+  }catch{
+    const appt = db.appointments.find(x => x.id === id);
+    if(appt){ appt.status = status; renderAll(); }
+  }
+}
+
+function renderStats(){
+  document.getElementById('clientsCount').textContent = db.clients.length;
+  document.getElementById('appointmentsCount').textContent = db.appointments.length;
+  document.getElementById('todayCount').textContent = db.appointments.filter(a => a.date === todayISO()).length;
+  const income = db.appointments.filter(a => a.status === 'הגיע').reduce((sum,a) => sum + servicePriceById(a.serviceId), 0);
+  document.getElementById('incomeCount').textContent = formatMoney(income);
+}
+function renderSelects(){
+  const clientSel = document.getElementById('appointmentClient');
+  clientSel.innerHTML = '<option value="">בחר לקוח</option>' + db.clients.map(c => `<option value="${c.id || c.name}">${c.name}</option>`).join('');
+  const serviceSel = document.getElementById('appointmentService');
+  serviceSel.innerHTML = '<option value="">בחר שירות</option>' + db.services.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+}
+function renderClients(){
+  const q = document.getElementById('clientSearch').value.trim().toLowerCase();
+  const list = db.clients.filter(c => !q || (c.name || '').toLowerCase().includes(q) || (c.phone || '').toLowerCase().includes(q));
+  const el = document.getElementById('clientsList');
+  if(!list.length){ el.innerHTML = '<div class="empty">אין לקוחות.</div>'; return; }
+  el.innerHTML = list.map(c => `
+    <div class="item">
+      <div class="item-top">
+        <div><div class="name">${c.name || ''}</div><div class="meta">${c.phone || ''}</div></div>
+        <div class="badges">${c.preference ? `<span class="badge">${c.preference}</span>` : ''}</div>
+      </div>
+      <div class="meta">${c.notes || 'ללא הערות'}</div>
+    </div>
+  `).join('');
+}
+function renderAppointments(){
+  const el = document.getElementById('appointmentsList');
+  if(!db.appointments.length){ el.innerHTML = '<div class="empty">אין תורים.</div>'; return; }
+  const list = [...db.appointments].sort((a,b)=>(String(a.date)+String(a.time)).localeCompare(String(b.date)+String(b.time)));
+  el.innerHTML = list.map(a => `
+    <div class="item">
+      <div class="item-top">
+        <div><div class="name">${clientNameById(a.clientId) || a.clientId} • ${serviceNameById(a.serviceId)}</div><div class="meta">${a.date || ''} בשעה ${a.time || ''}</div></div>
+        <div class="badges"><span class="badge">${a.status || 'נקבע'}</span><span class="badge">${formatMoney(servicePriceById(a.serviceId))}</span></div>
+      </div>
+      <div class="meta">${a.note || ''}</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn blue small" onclick="updateAppointmentStatus('${a.id}','הגיע')">סמן הגיע</button>
+        <button class="btn light small" onclick="updateAppointmentStatus('${a.id}','לא הגיע')">סמן לא הגיע</button>
+      </div>
+    </div>
+  `).join('');
+}
+function renderServices(){
+  const el = document.getElementById('servicesList');
+  if(!db.services.length){ el.innerHTML = '<div class="empty">אין שירותים.</div>'; return; }
+  el.innerHTML = db.services.map(s => `
+    <div class="item">
+      <div class="item-top">
+        <div><div class="name">${s.name}</div><div class="meta">${s.desc || ''}</div></div>
+        <div class="badges">
+          ${s.category ? `<span class="badge">${s.category}</span>` : ''}
+          ${s.price ? `<span class="badge">${formatMoney(s.price)}</span>` : ''}
+          ${s.duration ? `<span class="badge">${s.duration} דק׳</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+function renderProducts(){
+  const el = document.getElementById('productsList');
+  if(!db.products.length){ el.innerHTML = '<div class="empty">אין מוצרים או מבצעים.</div>'; return; }
+  el.innerHTML = db.products.map(p => `
+    <div class="item">
+      <div class="item-top">
+        <div><div class="name">${p.name}</div><div class="meta">${p.desc || ''}</div></div>
+        <div class="badges">
+          ${p.category ? `<span class="badge">${p.category}</span>` : ''}
+          ${p.price ? `<span class="badge">${p.price}</span>` : ''}
+          ${p.stock ? `<span class="badge">${p.stock}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+function renderAll(){ renderStats(); renderSelects(); renderClients(); renderAppointments(); renderServices(); renderProducts(); }
+
+refreshAll().catch(() => loadSample());
+</script>
+</body>
+</html>
