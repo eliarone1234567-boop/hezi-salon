@@ -1,46 +1,30 @@
 
-import express from 'express';
-import cors from 'cors';
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// כדי לעבוד עם __dirname ב-ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use(cors());
 app.use(express.json());
 
-// בדיקה
-app.get('/', (req, res) => {
-  res.send('Hezi Salon System Running 🚀');
+// 👇 זה החלק החשוב
+app.use(express.static(__dirname));
+
+// דף הבית
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// רשימת לקוחות
-let clients = [];
-
-// הוספת לקוח
-app.post('/clients', (req, res) => {
-  const client = req.body;
-  clients.push(client);
-  res.json({ message: 'לקוח נוסף בהצלחה', client });
-});
-
-// קבלת לקוחות
-app.get('/clients', (req, res) => {
-  res.json(clients);
-});
-
-// רשימת תורים
-let appointments = [];
-
-// הוספת תור
-app.post('/appointments', (req, res) => {
-  const appointment = req.body;
-  appointments.push(appointment);
-  res.json({ message: 'תור נקבע', appointment });
-});
-
-// קבלת תורים
-app.get('/appointments', (req, res) => {
-  res.json(appointments);
+// TEST
+app.get("/test", (req, res) => {
+  res.send("Server works 🚀");
 });
 
 app.listen(port, () => {
