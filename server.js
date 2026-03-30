@@ -3,38 +3,33 @@ const { google } = require("googleapis");
 
 const app = express();
 
-// 🔐 משתנים מה-Render
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = "https://hezi-salon.onrender.com/oauth2callback";
 
-// יצירת חיבור ל-Google
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
   CLIENT_SECRET,
   REDIRECT_URI
 );
 
-// דף ראשי
 app.get("/", (req, res) => {
   res.send("Hezi Salon System Running 🚀");
 });
 
-// התחברות לגוגל
 app.get("/auth", (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+    prompt: "consent"
   });
 
   res.send(`<a href="${url}">לחץ להתחבר ליומן גוגל</a>`);
 });
 
-// חזרה מגוגל
 app.get("/oauth2callback", async (req, res) => {
   try {
     const code = req.query.code;
-
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
@@ -45,7 +40,6 @@ app.get("/oauth2callback", async (req, res) => {
   }
 });
 
-// 📅 בדיקת אירועים מהיומן
 app.get("/events", async (req, res) => {
   try {
     const calendar = google.calendar({
@@ -55,32 +49,96 @@ app.get("/events", async (req, res) => {
 
     const response = await calendar.events.list({
       calendarId: "primary",
-      maxResults: 5,
+      maxResults: 10,
       singleEvents: true,
       orderBy: "startTime",
     });
 
-    const events = response.data.items;
+    const events = response.data.items || [];
 
     if (!events.length) {
-      return res.send("אין אירועים ביומן 😅");
+      return res.send(`
+        <html dir="rtl" lang="he">
+        <head>
+          <meta charset="UTF-8" />
+          <title>תורים במספרה</title>
+        </head>
+        <body style="font-family: Arial; text-align: center; padding: 40px;">
+          <h2>אין אירועים ביומן 😅</h2>
+        </body>
+        </html>
+      `);
     }
 
-    let output = "📅 האירועים שלך:\n\n";
+    let html = `
+      <html dir="rtl" lang="he">
+      <head>
+        <meta charset="UTF-8" />
+        <title>תורים במספרה</title>
+        <style>
+          body {
+            font-family: Arial;
+            background: #f7f7f7;
+            margin: 0;
+            padding: 30px;
+            text-align: center;
+          }
+          h1 {
+            color: #222;
+            margin-bottom: 30px;
+          }
+          .card {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 12px auto;
+            width: 320px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+          }
+          .title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 8px;
+          }
+          .time {
+            color: #555;
+            font-size: 15px;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>📅 התורים שלך</h1>
+    `;
 
     events.forEach((event) => {
-      output += `👉 ${event.summary}\n`;
+      const title = event.summary || "ללא כותרת";
+      const start = event.start.dateTime || event.start.date || "ללא זמן";
+      const end = event.end.dateTime || event.end.date || "ללא זמן";
+
+      html += `
+        <div class="card">
+          <div class="title">${title}</div>
+          <div class="time">התחלה: ${start}</div>
+          <div class="time">סיום: ${end}</div>
+        </div>
+      `;
     });
 
-    res.send(`<pre>${output}</pre>`);
+    html += `
+      </body>
+      </html>
+    `;
+
+    res.send(html);
   } catch (error) {
     console.log(error);
     res.send("❌ שגיאה בקבלת אירועים");
   }
 });
 
-// הפעלת השרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
+
