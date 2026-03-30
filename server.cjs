@@ -5,7 +5,7 @@ const { google } = require("googleapis");
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
-// ====== Google OAuth ======
+// ====== CONFIG ======
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = "https://hezi-salon.onrender.com/oauth2callback";
@@ -16,15 +16,14 @@ const oauth2Client = new google.auth.OAuth2(
   REDIRECT_URI
 );
 
-// ====== שמירת טוקן ======
 const TOKEN_PATH = "token.json";
+const CLIENTS_PATH = "clients.json";
+
+// ====== LOAD ======
 if (fs.existsSync(TOKEN_PATH)) {
-  const tokens = JSON.parse(fs.readFileSync(TOKEN_PATH));
-  oauth2Client.setCredentials(tokens);
+  oauth2Client.setCredentials(JSON.parse(fs.readFileSync(TOKEN_PATH)));
 }
 
-// ====== קובץ לקוחות ======
-const CLIENTS_PATH = "clients.json";
 if (!fs.existsSync(CLIENTS_PATH)) {
   fs.writeFileSync(CLIENTS_PATH, JSON.stringify([]));
 }
@@ -37,17 +36,17 @@ function saveClients(data) {
   fs.writeFileSync(CLIENTS_PATH, JSON.stringify(data, null, 2));
 }
 
-// ====== דף ראשי ======
+// ====== HOME ======
 app.get("/", (req, res) => {
   res.send(`
     <h2>💎 מערכת חזי</h2>
     <a href="/events">📅 יומן</a><br>
     <a href="/clients">👥 לקוחות</a><br>
-    <a href="/auth">🔐 התחברות לגוגל</a>
+    <a href="/auth">🔐 התחברות</a>
   `);
 });
 
-// ====== התחברות ======
+// ====== AUTH ======
 app.get("/auth", (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
@@ -55,23 +54,17 @@ app.get("/auth", (req, res) => {
     prompt: "consent",
   });
 
-  res.send(`<a href="${url}">🔐 התחבר ליומן</a>`);
+  res.send(`<a href="${url}">🔐 התחבר לגוגל</a>`);
 });
 
-// ====== callback ======
 app.get("/oauth2callback", async (req, res) => {
-  try {
-    const { tokens } = await oauth2Client.getToken(req.query.code);
-    oauth2Client.setCredentials(tokens);
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
-    res.send("✅ מחובר! כנס ל /events");
-  } catch (err) {
-    console.log(err);
-    res.send("❌ שגיאה");
-  }
+  const { tokens } = await oauth2Client.getToken(req.query.code);
+  oauth2Client.setCredentials(tokens);
+  fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+  res.send("✅ מחובר!");
 });
 
-// ====== יומן ======
+// ====== EVENTS (יומן) ======
 app.get("/events", async (req, res) => {
   try {
     const calendar = google.calendar({
@@ -93,73 +86,70 @@ app.get("/events", async (req, res) => {
     <head>
     <meta charset="UTF-8">
     <style>
-    body { margin:0;font-family:Arial;background:#f1f3f4 }
-    .top { background:white;padding:15px;text-align:center;font-size:22px }
-    .wrap { display:grid;grid-template-columns:80px 1fr;height:100vh }
-    .hours { background:#fafafa;border-left:1px solid #ddd }
-    .hour { height:60px;border-bottom:1px solid #eee;font-size:12px;padding:5px }
-    .day { position:relative;background:white }
-    .event { position:absolute;left:10px;right:10px;background:#1a73e8;color:white;border-radius:10px;padding:5px }
+    body { margin:0;font-family:Arial;background:#0f172a;color:white }
+    .top { padding:20px;font-size:24px }
+    .card { background:#1e293b;margin:10px;padding:15px;border-radius:12px }
     </style>
     </head>
     <body>
-
     <div class="top">📅 יומן</div>
-    <div class="wrap">
-    <div class="hours">
     `;
 
-    for (let i = 8; i <= 20; i++) {
-      html += `<div class="hour">${i}:00</div>`;
-    }
-
-    html += `</div><div class="day">`;
-
-    events.forEach(event => {
-      if (!event.start.dateTime) return;
-
-      const start = new Date(event.start.dateTime);
-      const end = new Date(event.end.dateTime);
-
-      const startHour = start.getHours() + start.getMinutes()/60;
-      const endHour = end.getHours() + end.getMinutes()/60;
-
-      const top = (startHour - 8) * 60;
-      const height = (endHour - startHour) * 60;
-
-      html += `
-        <div class="event" style="top:${top}px;height:${height}px;">
-          ${event.summary}
-        </div>
-      `;
+    events.forEach(e => {
+      html += `<div class="card">${e.summary}</div>`;
     });
 
-    html += `</div></div></body></html>`;
-
+    html += `</body></html>`;
     res.send(html);
 
-  } catch (err) {
-    console.log(err);
-    res.send("❌ שגיאה ביומן");
+  } catch {
+    res.send("❌ שגיאה");
   }
 });
 
-// ====== רשימת לקוחות ======
+// ====== CLIENTS ======
 app.get("/clients", (req, res) => {
-  const clients = getClients();
+  const q = req.query.q || "";
+  let clients = getClients();
+
+  if (q) {
+    clients = clients.filter(c =>
+      c.name.includes(q) || c.phone.includes(q)
+    );
+  }
 
   let html = `
-  <html dir="rtl"><body style="font-family:Arial;background:#f5f5f5;padding:20px">
+  <html dir="rtl">
+  <head>
+  <style>
+  body { font-family:Arial;background:#0f172a;color:white;padding:20px }
+  .card { background:#1e293b;padding:15px;margin:10px;border-radius:12px }
+  input { padding:10px;width:100%;margin-bottom:10px;border-radius:8px }
+  a { color:#38bdf8 }
+  </style>
+  </head>
+  <body>
+
   <h2>👥 לקוחות</h2>
-  <a href="/add-client">➕ לקוח חדש</a><br><br>
+
+  <form>
+    <input name="q" placeholder="🔍 חיפוש לקוח..." />
+  </form>
+
+  <a href="/add-client">➕ לקוח חדש</a>
   `;
 
   clients.forEach((c, i) => {
     html += `
-      <div style="background:white;padding:10px;margin-bottom:10px;border-radius:8px">
+      <div class="card">
         <b>${c.name}</b><br>
-        📞 ${c.phone}<br>
-        <a href="/client/${i}">כרטסת צבע</a>
+        📞 ${c.phone}<br><br>
+
+        <a href="/client/${i}">🎨 כרטסת</a><br>
+
+        <a href="https://wa.me/972${c.phone.substring(1)}">
+        📲 שלח וואטסאפ
+        </a>
       </div>
     `;
   });
@@ -168,7 +158,7 @@ app.get("/clients", (req, res) => {
   res.send(html);
 });
 
-// ====== הוספת לקוח ======
+// ====== ADD CLIENT ======
 app.get("/add-client", (req, res) => {
   res.send(`
     <form method="POST" action="/add-client">
@@ -192,14 +182,16 @@ app.post("/add-client", (req, res) => {
   res.redirect("/clients");
 });
 
-// ====== כרטסת צבע ======
+// ====== CLIENT CARD ======
 app.get("/client/:id", (req, res) => {
   const clients = getClients();
   const client = clients[req.params.id];
 
   let html = `
-  <html dir="rtl"><body style="font-family:Arial;padding:20px">
-  <h2>🎨 כרטסת צבע - ${client.name}</h2>
+  <html dir="rtl">
+  <body style="font-family:Arial;background:#0f172a;color:white;padding:20px">
+
+  <h2>🎨 ${client.name}</h2>
 
   <form method="POST" action="/client/${req.params.id}">
     מספר צבע: <input name="color"/><br>
@@ -213,8 +205,10 @@ app.get("/client/:id", (req, res) => {
 
   client.colors.forEach(c => {
     html += `
-      <div style="border:1px solid #ddd;margin:5px;padding:5px">
-        🎨 ${c.color} | ${c.amount} | ${c.brand}<br>
+      <div style="background:#1e293b;padding:10px;margin:10px;border-radius:10px">
+        🎨 ${c.color}<br>
+        📦 ${c.amount}<br>
+        🏢 ${c.brand}<br>
         📅 ${c.date}
       </div>
     `;
@@ -224,7 +218,7 @@ app.get("/client/:id", (req, res) => {
   res.send(html);
 });
 
-// ====== הוספת צבע ======
+// ====== ADD COLOR ======
 app.post("/client/:id", (req, res) => {
   const clients = getClients();
   const client = clients[req.params.id];
@@ -237,12 +231,11 @@ app.post("/client/:id", (req, res) => {
   });
 
   saveClients(clients);
-
   res.redirect("/client/" + req.params.id);
 });
 
-// ====== הפעלת שרת ======
+// ====== SERVER ======
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server running 🚀");
+  console.log("🚀 running");
 });
