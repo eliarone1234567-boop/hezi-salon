@@ -32,7 +32,6 @@ app.get("/oauth2callback", async (req, res) => {
     const code = req.query.code;
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
-
     res.send("🎉 התחברת בהצלחה ליומן!");
   } catch (error) {
     console.log(error);
@@ -56,20 +55,6 @@ app.get("/events", async (req, res) => {
 
     const events = response.data.items || [];
 
-    if (!events.length) {
-      return res.send(`
-        <html dir="rtl" lang="he">
-        <head>
-          <meta charset="UTF-8" />
-          <title>תורים במספרה</title>
-        </head>
-        <body style="font-family: Arial; text-align: center; padding: 40px;">
-          <h2>אין אירועים ביומן 😅</h2>
-        </body>
-        </html>
-      `);
-    }
-
     let html = `
       <html dir="rtl" lang="he">
       <head>
@@ -83,8 +68,13 @@ app.get("/events", async (req, res) => {
             padding: 30px;
             text-align: center;
           }
-          h1 {
-            color: #222;
+          .top {
+            background: red;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            padding: 20px;
+            border-radius: 12px;
             margin-bottom: 30px;
           }
           .card {
@@ -108,22 +98,27 @@ app.get("/events", async (req, res) => {
         </style>
       </head>
       <body>
+        <div class="top">גרסה חדשה עלתה</div>
         <h1>📅 התורים שלך</h1>
     `;
 
-    events.forEach((event) => {
-      const title = event.summary || "ללא כותרת";
-      const start = event.start.dateTime || event.start.date || "ללא זמן";
-      const end = event.end.dateTime || event.end.date || "ללא זמן";
+    if (!events.length) {
+      html += `<div class="card"><div class="title">אין אירועים ביומן 😅</div></div>`;
+    } else {
+      events.forEach((event) => {
+        const title = event.summary || "ללא כותרת";
+        const start = event.start.dateTime || event.start.date || "ללא זמן";
+        const end = event.end.dateTime || event.end.date || "ללא זמן";
 
-      html += `
-        <div class="card">
-          <div class="title">${title}</div>
-          <div class="time">התחלה: ${start}</div>
-          <div class="time">סיום: ${end}</div>
-        </div>
-      `;
-    });
+        html += `
+          <div class="card">
+            <div class="title">${title}</div>
+            <div class="time">התחלה: ${start}</div>
+            <div class="time">סיום: ${end}</div>
+          </div>
+        `;
+      });
+    }
 
     html += `
       </body>
@@ -141,4 +136,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
-
