@@ -53,7 +53,7 @@ function getClientById(id) {
 }
 
 function generateId() {
-  return Date.now().toString() + Math.floor(Math.random() * 1000).toString();
+  return Date.now().toString() + Math.floor(Math.random() * 10000).toString();
 }
 
 // =========================
@@ -118,9 +118,15 @@ function formatTimeOnly(dateString) {
   });
 }
 
+function formatDateTime(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleString("he-IL");
+}
+
 function startOfWeek(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sunday
+  const day = d.getDay(); // 0=Sun
   d.setHours(0, 0, 0, 0);
   return new Date(d.setDate(d.getDate() - day));
 }
@@ -157,13 +163,77 @@ function getDayLabel(date) {
   });
 }
 
-function eventColorClass(summary = "") {
-  const text = summary.toLowerCase();
+function eventColorClass(colorId = "", summary = "") {
+  if (colorId) {
+    const map = {
+      "1": "event-color-blue",
+      "2": "event-color-green",
+      "3": "event-color-purple",
+      "4": "event-color-red",
+      "5": "event-color-orange",
+      "6": "event-color-blue",
+      "7": "event-color-green",
+      "8": "event-color-purple",
+      "9": "event-color-red",
+      "10": "event-color-orange",
+      "11": "event-color-blue",
+    };
+    return map[colorId] || "event-color-blue";
+  }
+
+  const text = (summary || "").toLowerCase();
   if (text.includes("צבע")) return "event-color-red";
   if (text.includes("פן")) return "event-color-green";
   if (text.includes("החלקה")) return "event-color-purple";
   if (text.includes("פסים")) return "event-color-orange";
   return "event-color-blue";
+}
+
+function googleColorOptions(selected = "") {
+  const colors = [
+    { id: "1", name: "כחול" },
+    { id: "2", name: "ירוק" },
+    { id: "3", name: "סגול" },
+    { id: "4", name: "אדום" },
+    { id: "5", name: "כתום" },
+    { id: "6", name: "טורקיז" },
+    { id: "7", name: "זית" },
+    { id: "8", name: "אפור-כחול" },
+    { id: "9", name: "ורוד" },
+    { id: "10", name: "צהוב" },
+    { id: "11", name: "אפור" },
+  ];
+
+  return colors
+    .map(
+      (c) =>
+        `<option value="${c.id}" ${String(selected) === String(c.id) ? "selected" : ""}>${c.name}</option>`
+    )
+    .join("");
+}
+
+function clientDisplayName(client) {
+  return [client.firstName, client.lastName].filter(Boolean).join(" ").trim();
+}
+
+function normalizePhone(phone = "") {
+  return phone.replace(/\D/g, "");
+}
+
+function whatsappLink(phone, name = "") {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return "#";
+
+  let international = normalized;
+  if (international.startsWith("0")) {
+    international = "972" + international.slice(1);
+  }
+
+  const text = encodeURIComponent(
+    `היי ${name || ""},\nתזכורת מהמספרה של חזי 💇‍♂️`
+  );
+
+  return `https://wa.me/${international}?text=${text}`;
 }
 
 // =========================
@@ -187,7 +257,7 @@ function layout(title, content) {
       }
 
       .topbar {
-        background: #111827;
+        background: linear-gradient(90deg, #111827, #1f2937);
         color: white;
         padding: 16px 24px;
         display: flex;
@@ -285,6 +355,11 @@ function layout(title, content) {
         color: white;
       }
 
+      .btn-green {
+        background: #047857;
+        color: white;
+      }
+
       .row-actions {
         display: flex;
         gap: 8px;
@@ -368,6 +443,15 @@ function layout(title, content) {
         margin-bottom: 10px;
       }
 
+      .client-photo {
+        width: 140px;
+        height: 140px;
+        object-fit: cover;
+        border-radius: 16px;
+        border: 1px solid #dbe1ea;
+        background: #f3f4f6;
+      }
+
       /* WEEKLY CALENDAR */
       .calendar-toolbar {
         display: flex;
@@ -424,9 +508,23 @@ function layout(title, content) {
         border-bottom: 1px solid #edf0f5;
         background: #f8fafc;
         min-height: 56px;
-        padding: 10px;
+        padding: 8px;
         text-align: center;
         font-weight: bold;
+      }
+
+      .day-header-top {
+        margin-bottom: 8px;
+      }
+
+      .day-add {
+        display: inline-block;
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #111827;
+        color: white;
+        text-decoration: none;
       }
 
       .calendar-body {
@@ -585,7 +683,7 @@ app.get("/", async (req, res) => {
       <div class="card">
         <h3>סטטוס מערכת</h3>
         <p class="muted">
-          האפליקציה כוללת יומן שבועי, לקוחות, כרטסת צבע, הוספת תורים, עריכת לקוחות וחיפוש.
+          האפליקציה כוללת יומן שבועי, חיפוש ביומן, הוספת תור, ניהול לקוחות, תמונת לקוח, כרטסת צבע והיסטוריית טיפולים.
         </p>
       </div>
     </div>
@@ -632,7 +730,7 @@ app.get("/oauth2callback", async (req, res) => {
 });
 
 // =========================
-// WEEKLY EVENTS
+// WEEKLY CALENDAR + SEARCH
 // =========================
 app.get("/events", async (req, res) => {
   if (!isGoogleConnected()) {
@@ -651,6 +749,7 @@ app.get("/events", async (req, res) => {
   }
 
   try {
+    const q = (req.query.q || "").trim();
     const dateParam = req.query.date;
     const selectedDate = dateParam ? new Date(dateParam) : new Date();
     const weekStart = startOfWeek(selectedDate);
@@ -666,7 +765,15 @@ app.get("/events", async (req, res) => {
       maxResults: 200,
     });
 
-    const events = response.data.items || [];
+    let events = response.data.items || [];
+
+    if (q) {
+      events = events.filter((event) => {
+        const text = `${event.summary || ""} ${event.description || ""}`.toLowerCase();
+        return text.includes(q.toLowerCase());
+      });
+    }
+
     const days = [];
     for (let i = 0; i < 7; i++) {
       days.push(addDays(weekStart, i));
@@ -683,7 +790,12 @@ app.get("/events", async (req, res) => {
 
     let headers = `<div class="corner-cell"></div>`;
     for (const day of days) {
-      headers += `<div class="day-header">${escapeHtml(getDayLabel(day))}</div>`;
+      headers += `
+        <div class="day-header">
+          <div class="day-header-top">${escapeHtml(getDayLabel(day))}</div>
+          <a class="day-add" href="/events/new?date=${toDateInputValue(day)}">+ תור</a>
+        </div>
+      `;
     }
 
     let body = `<div class="time-col">`;
@@ -716,7 +828,7 @@ app.get("/events", async (req, res) => {
         const height = Math.max((endHourValue - startHourValue) * 64, 36);
 
         columnHtml += `
-          <div class="event-block ${eventColorClass(event.summary || "")}" style="top:${top}px;height:${height}px;">
+          <div class="event-block ${eventColorClass(event.colorId, event.summary || "")}" style="top:${top}px;height:${height}px;">
             <div class="event-title">${escapeHtml(event.summary || "ללא כותרת")}</div>
             <div class="event-time">${escapeHtml(formatTimeOnly(event.start.dateTime))} - ${escapeHtml(formatTimeOnly(event.end.dateTime))}</div>
           </div>
@@ -732,9 +844,9 @@ app.get("/events", async (req, res) => {
 
       <div class="calendar-toolbar">
         <div class="right">
-          <a class="btn btn-light" href="/events?date=${prevWeek}">שבוע קודם</a>
+          <a class="btn btn-light" href="/events?date=${prevWeek}&q=${encodeURIComponent(q)}">שבוע קודם</a>
           <a class="btn btn-light" href="/events?date=${todayValue}">השבוע הנוכחי</a>
-          <a class="btn btn-light" href="/events?date=${nextWeek}">שבוע הבא</a>
+          <a class="btn btn-light" href="/events?date=${nextWeek}&q=${encodeURIComponent(q)}">שבוע הבא</a>
         </div>
 
         <div class="left">
@@ -743,6 +855,14 @@ app.get("/events", async (req, res) => {
           </div>
           <a class="btn" href="/events/new">תור חדש</a>
         </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <form method="GET" action="/events" class="search-box">
+          <input type="hidden" name="date" value="${toDateInputValue(weekStart)}" />
+          <input name="q" value="${escapeHtml(q)}" placeholder="חיפוש ביומן לפי שם לקוח / כותרת / הערות" />
+          <button class="btn" type="submit">חפש</button>
+        </form>
       </div>
 
       <div class="calendar-wrapper">
@@ -769,11 +889,13 @@ app.get("/events", async (req, res) => {
 // =========================
 app.get("/events/new", (req, res) => {
   const clients = getClients();
+  const prefilledDate = req.query.date || "";
 
   const clientOptions = clients
-    .map(
-      (c) => `<option value="${c.id}">${escapeHtml(c.name)} - ${escapeHtml(c.phone)}</option>`
-    )
+    .map((c) => {
+      const fullName = clientDisplayName(c) || c.phone || "לקוח";
+      return `<option value="${c.id}">${escapeHtml(fullName)} - ${escapeHtml(c.phone || "")}</option>`;
+    })
     .join("");
 
   const html = `
@@ -808,7 +930,7 @@ app.get("/events/new", (req, res) => {
 
           <div class="form-group">
             <label>תאריך</label>
-            <input type="date" name="date" required />
+            <input type="date" name="date" value="${escapeHtml(prefilledDate)}" required />
           </div>
 
           <div class="form-group">
@@ -819,6 +941,14 @@ app.get("/events/new", (req, res) => {
           <div class="form-group">
             <label>שעת סיום</label>
             <input type="time" name="endTime" required />
+          </div>
+
+          <div class="form-group">
+            <label>צבע לתור</label>
+            <select name="colorId">
+              <option value="">לפי ברירת מחדל</option>
+              ${googleColorOptions("")}
+            </select>
           </div>
         </div>
 
@@ -843,13 +973,31 @@ app.post("/events/new", async (req, res) => {
   }
 
   try {
-    const { clientId, service, summary, date, startTime, endTime, description } = req.body;
+    const {
+      clientId,
+      service,
+      summary,
+      date,
+      startTime,
+      endTime,
+      description,
+      colorId,
+    } = req.body;
 
     let finalTitle = summary?.trim() || service;
+    let finalColorId = colorId || "";
+
     if (clientId) {
       const client = getClientById(clientId);
-      if (client && !summary?.trim()) {
-        finalTitle = `${client.name} - ${service}`;
+
+      if (client) {
+        if (!summary?.trim()) {
+          finalTitle = `${clientDisplayName(client)} - ${service}`;
+        }
+
+        if (!finalColorId && client.defaultColorId) {
+          finalColorId = client.defaultColorId;
+        }
       }
     }
 
@@ -862,6 +1010,7 @@ app.post("/events/new", async (req, res) => {
       requestBody: {
         summary: finalTitle,
         description: description || "",
+        colorId: finalColorId || undefined,
         start: {
           dateTime: startDateTime.toISOString(),
           timeZone: "Asia/Jerusalem",
@@ -872,6 +1021,23 @@ app.post("/events/new", async (req, res) => {
         },
       },
     });
+
+    // save treatment history into client card
+    if (clientId) {
+      const clients = getClients();
+      const client = clients.find((c) => c.id === clientId);
+      if (client) {
+        if (!client.treatmentHistory) client.treatmentHistory = [];
+        client.treatmentHistory.unshift({
+          id: generateId(),
+          date,
+          service,
+          notes: description || "",
+          colorId: finalColorId || "",
+        });
+        saveClients(clients);
+      }
+    }
 
     res.redirect("/events");
   } catch (err) {
@@ -888,20 +1054,27 @@ app.get("/clients", (req, res) => {
   let clients = getClients();
 
   if (q) {
-    clients = clients.filter(
-      (c) =>
-        c.name.includes(q) ||
-        c.phone.includes(q) ||
-        (c.notes || "").includes(q)
-    );
+    clients = clients.filter((c) => {
+      const text = [
+        c.firstName,
+        c.lastName,
+        c.phone,
+        c.email,
+        c.notes,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return text.includes(q);
+    });
   }
 
   let rows = "";
   for (const client of clients) {
     rows += `
       <tr>
-        <td>${escapeHtml(client.name)}</td>
+        <td>${escapeHtml(clientDisplayName(client))}</td>
         <td>${escapeHtml(client.phone || "-")}</td>
+        <td>${escapeHtml(client.email || "-")}</td>
         <td>${escapeHtml(client.notes || "-")}</td>
         <td>
           <div class="row-actions">
@@ -921,7 +1094,7 @@ app.get("/clients", (req, res) => {
 
     <div class="card" style="margin-bottom:16px">
       <form method="GET" action="/clients" class="search-box">
-        <input name="q" value="${escapeHtml(q)}" placeholder="חיפוש לפי שם, טלפון או הערות" />
+        <input name="q" value="${escapeHtml(q)}" placeholder="חיפוש לפי שם, טלפון, מייל או הערות" />
         <button class="btn" type="submit">חפש</button>
       </form>
     </div>
@@ -939,6 +1112,7 @@ app.get("/clients", (req, res) => {
               <tr>
                 <th>שם</th>
                 <th>טלפון</th>
+                <th>מייל</th>
                 <th>הערות</th>
                 <th>פעולות</th>
               </tr>
@@ -964,12 +1138,44 @@ app.get("/clients/new", (req, res) => {
       <form method="POST" action="/clients/new">
         <div class="grid-2">
           <div class="form-group">
-            <label>שם</label>
-            <input name="name" required />
+            <label>שם פרטי</label>
+            <input name="firstName" required />
+          </div>
+          <div class="form-group">
+            <label>שם משפחה</label>
+            <input name="lastName" required />
           </div>
           <div class="form-group">
             <label>טלפון</label>
             <input name="phone" required />
+          </div>
+          <div class="form-group">
+            <label>מייל</label>
+            <input name="email" />
+          </div>
+          <div class="form-group">
+            <label>מין</label>
+            <select name="gender">
+              <option value="">בחר</option>
+              <option value="זכר">זכר</option>
+              <option value="נקבה">נקבה</option>
+              <option value="אחר">אחר</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>תאריך לידה</label>
+            <input type="date" name="birthday" />
+          </div>
+          <div class="form-group">
+            <label>צבע קבוע ללקוח</label>
+            <select name="defaultColorId">
+              <option value="">ללא</option>
+              ${googleColorOptions("")}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>קישור לתמונה</label>
+            <input name="imageUrl" placeholder="https://..." />
           </div>
         </div>
 
@@ -991,10 +1197,17 @@ app.post("/clients/new", (req, res) => {
 
   clients.push({
     id: generateId(),
-    name: req.body.name?.trim() || "",
+    firstName: req.body.firstName?.trim() || "",
+    lastName: req.body.lastName?.trim() || "",
     phone: req.body.phone?.trim() || "",
+    email: req.body.email?.trim() || "",
+    gender: req.body.gender?.trim() || "",
+    birthday: req.body.birthday?.trim() || "",
     notes: req.body.notes?.trim() || "",
+    imageUrl: req.body.imageUrl?.trim() || "",
+    defaultColorId: req.body.defaultColorId?.trim() || "",
     colorHistory: [],
+    treatmentHistory: [],
   });
 
   saveClients(clients);
@@ -1016,12 +1229,44 @@ app.get("/clients/:id/edit", (req, res) => {
       <form method="POST" action="/clients/${client.id}/edit">
         <div class="grid-2">
           <div class="form-group">
-            <label>שם</label>
-            <input name="name" value="${escapeHtml(client.name)}" required />
+            <label>שם פרטי</label>
+            <input name="firstName" value="${escapeHtml(client.firstName || "")}" required />
+          </div>
+          <div class="form-group">
+            <label>שם משפחה</label>
+            <input name="lastName" value="${escapeHtml(client.lastName || "")}" required />
           </div>
           <div class="form-group">
             <label>טלפון</label>
-            <input name="phone" value="${escapeHtml(client.phone)}" required />
+            <input name="phone" value="${escapeHtml(client.phone || "")}" required />
+          </div>
+          <div class="form-group">
+            <label>מייל</label>
+            <input name="email" value="${escapeHtml(client.email || "")}" />
+          </div>
+          <div class="form-group">
+            <label>מין</label>
+            <select name="gender">
+              <option value="">בחר</option>
+              <option value="זכר" ${client.gender === "זכר" ? "selected" : ""}>זכר</option>
+              <option value="נקבה" ${client.gender === "נקבה" ? "selected" : ""}>נקבה</option>
+              <option value="אחר" ${client.gender === "אחר" ? "selected" : ""}>אחר</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>תאריך לידה</label>
+            <input type="date" name="birthday" value="${escapeHtml(client.birthday || "")}" />
+          </div>
+          <div class="form-group">
+            <label>צבע קבוע ללקוח</label>
+            <select name="defaultColorId">
+              <option value="">ללא</option>
+              ${googleColorOptions(client.defaultColorId || "")}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>קישור לתמונה</label>
+            <input name="imageUrl" value="${escapeHtml(client.imageUrl || "")}" />
           </div>
         </div>
 
@@ -1046,9 +1291,15 @@ app.post("/clients/:id/edit", (req, res) => {
     return res.send(layout("לא נמצא", `<div class="card">לקוח לא נמצא</div>`));
   }
 
-  client.name = req.body.name?.trim() || "";
+  client.firstName = req.body.firstName?.trim() || "";
+  client.lastName = req.body.lastName?.trim() || "";
   client.phone = req.body.phone?.trim() || "";
+  client.email = req.body.email?.trim() || "";
+  client.gender = req.body.gender?.trim() || "";
+  client.birthday = req.body.birthday?.trim() || "";
   client.notes = req.body.notes?.trim() || "";
+  client.imageUrl = req.body.imageUrl?.trim() || "";
+  client.defaultColorId = req.body.defaultColorId?.trim() || "";
 
   saveClients(clients);
   res.redirect(`/clients/${client.id}`);
@@ -1065,7 +1316,7 @@ app.post("/clients/:id/delete", (req, res) => {
 });
 
 // =========================
-// CLIENT PROFILE + COLOR CARD
+// CLIENT PROFILE
 // =========================
 app.get("/clients/:id", (req, res) => {
   const client = getClientById(req.params.id);
@@ -1091,17 +1342,43 @@ app.get("/clients/:id", (req, res) => {
     `;
   }
 
+  let treatmentRows = "";
+  for (const item of client.treatmentHistory || []) {
+    treatmentRows += `
+      <div class="card" style="margin-bottom:10px">
+        <div><strong>תאריך:</strong> ${escapeHtml(item.date)}</div>
+        <div><strong>טיפול:</strong> ${escapeHtml(item.service)}</div>
+        <div><strong>הערות:</strong> ${escapeHtml(item.notes || "-")}</div>
+      </div>
+    `;
+  }
+
   const html = `
     <div class="section-title">כרטיס לקוח</div>
 
     <div class="grid-2">
       <div class="card">
-        <h3>${escapeHtml(client.name)}</h3>
-        <p><strong>טלפון:</strong> ${escapeHtml(client.phone)}</p>
+        <h3>${escapeHtml(clientDisplayName(client))}</h3>
+        ${
+          client.imageUrl
+            ? `<img class="client-photo" src="${escapeHtml(client.imageUrl)}" alt="client image" />`
+            : `<div class="client-photo" style="display:flex;align-items:center;justify-content:center;">ללא תמונה</div>`
+        }
+        <p><strong>טלפון:</strong> ${escapeHtml(client.phone || "-")}</p>
+        <p><strong>מייל:</strong> ${escapeHtml(client.email || "-")}</p>
+        <p><strong>מין:</strong> ${escapeHtml(client.gender || "-")}</p>
+        <p><strong>תאריך לידה:</strong> ${escapeHtml(client.birthday || "-")}</p>
         <p><strong>הערות:</strong> ${escapeHtml(client.notes || "-")}</p>
+        <p><strong>צבע קבוע:</strong> ${escapeHtml(client.defaultColorId || "-")}</p>
+
         <div class="row-actions">
           <a class="btn" href="/clients/${client.id}/edit">עריכת לקוח</a>
           <a class="btn btn-light" href="/events/new">תור חדש</a>
+          ${
+            client.phone
+              ? `<a class="btn btn-green" href="${whatsappLink(client.phone, clientDisplayName(client))}" target="_blank">תזכורת וואטסאפ</a>`
+              : ""
+          }
         </div>
       </div>
 
@@ -1145,11 +1422,23 @@ app.get("/clients/:id", (req, res) => {
         ? colorRows
         : `<div class="card empty">אין עדיין רישומי צבע ללקוח הזה</div>`
     }
+
+    <div style="height:16px"></div>
+
+    <div class="section-title">היסטוריית טיפולים</div>
+    ${
+      (client.treatmentHistory || []).length
+        ? treatmentRows
+        : `<div class="card empty">אין עדיין היסטוריית טיפולים</div>`
+    }
   `;
 
-  res.send(layout(`כרטיס לקוח - ${client.name}`, html));
+  res.send(layout(`כרטיס לקוח - ${clientDisplayName(client)}`, html));
 });
 
+// =========================
+// ADD COLOR HISTORY
+// =========================
 app.post("/clients/:id/color/new", (req, res) => {
   const clients = getClients();
   const client = clients.find((c) => c.id === req.params.id);
