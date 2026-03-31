@@ -53,7 +53,7 @@ function getClientById(id) {
 }
 
 function generateId() {
-  return Date.now().toString();
+  return Date.now().toString() + Math.floor(Math.random() * 1000).toString();
 }
 
 // =========================
@@ -93,7 +93,83 @@ function getCalendarClient() {
 }
 
 // =========================
-// UI HELPERS
+// HELPERS
+// =========================
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function formatDateOnly(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("he-IL");
+}
+
+function formatTimeOnly(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleTimeString("he-IL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 sun
+  const diff = day === 0 ? -6 : 1 - day; // Monday start
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function toDateInputValue(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function sameDay(a, b) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
+function getDayLabel(date) {
+  return new Date(date).toLocaleDateString("he-IL", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function eventColorClass(summary = "") {
+  const text = summary.toLowerCase();
+  if (text.includes("צבע")) return "event-color-red";
+  if (text.includes("פן")) return "event-color-green";
+  if (text.includes("החלקה")) return "event-color-purple";
+  if (text.includes("פסים")) return "event-color-orange";
+  return "event-color-blue";
+}
+
+// =========================
+// UI LAYOUT
 // =========================
 function layout(title, content) {
   return `
@@ -104,41 +180,55 @@ function layout(title, content) {
     <title>${title}</title>
     <style>
       * { box-sizing: border-box; }
+
       body {
         margin: 0;
         font-family: Arial, sans-serif;
-        background: #f6f7fb;
+        background: #f5f7fb;
         color: #1f2937;
       }
+
       .topbar {
-        background: linear-gradient(90deg, #111827, #1f2937);
+        background: #111827;
         color: white;
-        padding: 18px 24px;
+        padding: 16px 24px;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 16px;
       }
+
       .brand {
         font-size: 24px;
         font-weight: bold;
       }
+
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
       .nav a {
         color: white;
         text-decoration: none;
-        margin-left: 16px;
-        font-size: 15px;
+        font-size: 14px;
       }
-      .nav a:hover { text-decoration: underline; }
+
+      .nav a:hover {
+        text-decoration: underline;
+      }
 
       .container {
-        max-width: 1200px;
+        max-width: 1400px;
         margin: 24px auto;
         padding: 0 16px;
       }
 
-      .grid {
-        display: grid;
-        gap: 16px;
+      .section-title {
+        margin-bottom: 14px;
+        font-size: 26px;
+        font-weight: bold;
       }
 
       .grid-2 {
@@ -157,18 +247,12 @@ function layout(title, content) {
         background: white;
         border-radius: 18px;
         padding: 18px;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.06);
-        border: 1px solid #eceef3;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.05);
+        border: 1px solid #e9edf5;
       }
 
       .card h2, .card h3 {
         margin-top: 0;
-      }
-
-      .stat {
-        font-size: 30px;
-        font-weight: bold;
-        color: #111827;
       }
 
       .muted {
@@ -176,16 +260,21 @@ function layout(title, content) {
         font-size: 14px;
       }
 
+      .stat {
+        font-size: 32px;
+        font-weight: bold;
+      }
+
       .btn {
         display: inline-block;
-        background: #111827;
-        color: white;
-        text-decoration: none;
         border: none;
         border-radius: 12px;
-        padding: 11px 16px;
+        padding: 10px 16px;
+        text-decoration: none;
         cursor: pointer;
         font-size: 14px;
+        background: #111827;
+        color: white;
       }
 
       .btn-light {
@@ -195,16 +284,42 @@ function layout(title, content) {
 
       .btn-danger {
         background: #b91c1c;
+        color: white;
       }
 
       .btn-green {
         background: #047857;
+        color: white;
       }
 
       .row-actions {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+      }
+
+      input, select, textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        font-size: 14px;
+        background: white;
+      }
+
+      textarea {
+        min-height: 90px;
+        resize: vertical;
+      }
+
+      .form-group {
+        margin-bottom: 14px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: bold;
       }
 
       table {
@@ -224,34 +339,16 @@ function layout(title, content) {
         font-weight: bold;
       }
 
-      input, select, textarea {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid #d1d5db;
-        border-radius: 10px;
-        font-size: 14px;
-        background: white;
+      .empty {
+        padding: 24px;
+        text-align: center;
+        color: #6b7280;
       }
 
-      textarea {
-        min-height: 90px;
-        resize: vertical;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 8px;
-        font-weight: bold;
-      }
-
-      .form-group {
-        margin-bottom: 14px;
-      }
-
-      .section-title {
-        margin-bottom: 14px;
-        font-size: 24px;
-        font-weight: bold;
+      .search-box {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
       }
 
       .pill {
@@ -272,33 +369,134 @@ function layout(title, content) {
         color: #991b1b;
       }
 
-      .search-box {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-      }
-
       .color-note {
         border-right: 4px solid #111827;
         padding-right: 10px;
         margin-bottom: 10px;
       }
 
-      .empty {
-        padding: 24px;
-        text-align: center;
-        color: #6b7280;
+      /* CALENDAR */
+      .calendar-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
       }
+
+      .calendar-toolbar .left,
+      .calendar-toolbar .right {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .week-title {
+        font-size: 18px;
+        font-weight: bold;
+      }
+
+      .calendar-shell {
+        background: white;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.05);
+      }
+
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: 70px repeat(7, 1fr);
+      }
+
+      .time-header {
+        background: #f8fafc;
+        border-left: 1px solid #edf0f5;
+        border-bottom: 1px solid #edf0f5;
+        min-height: 56px;
+      }
+
+      .day-header {
+        background: #f8fafc;
+        border-left: 1px solid #edf0f5;
+        border-bottom: 1px solid #edf0f5;
+        min-height: 56px;
+        padding: 10px;
+        text-align: center;
+        font-weight: bold;
+      }
+
+      .hour-label {
+        height: 64px;
+        border-left: 1px solid #edf0f5;
+        border-bottom: 1px solid #edf0f5;
+        padding: 8px;
+        font-size: 12px;
+        color: #6b7280;
+        background: #fafafa;
+      }
+
+      .day-cell {
+        position: relative;
+        height: 64px;
+        border-left: 1px solid #edf0f5;
+        border-bottom: 1px solid #edf0f5;
+        background: white;
+      }
+
+      .day-column {
+        position: relative;
+      }
+
+      .event-block {
+        position: absolute;
+        right: 6px;
+        left: 6px;
+        border-radius: 10px;
+        padding: 6px 8px;
+        color: white;
+        font-size: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      }
+
+      .event-title {
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+
+      .event-time {
+        font-size: 11px;
+        opacity: 0.95;
+      }
+
+      .event-color-blue { background: #1a73e8; }
+      .event-color-red { background: #d93025; }
+      .event-color-green { background: #188038; }
+      .event-color-purple { background: #9334e6; }
+      .event-color-orange { background: #e37400; }
 
       @media (max-width: 900px) {
         .grid-2, .grid-3 {
           grid-template-columns: 1fr;
         }
+
         .topbar {
           display: block;
         }
-        .nav {
-          margin-top: 10px;
+
+        .container {
+          padding: 0 10px;
+        }
+
+        .calendar-shell {
+          overflow-x: auto;
+        }
+
+        .calendar-grid {
+          min-width: 900px;
         }
       }
     </style>
@@ -315,41 +513,13 @@ function layout(title, content) {
         <a href="/auth">חיבור לגוגל</a>
       </div>
     </div>
+
     <div class="container">
       ${content}
     </div>
   </body>
   </html>
   `;
-}
-
-function formatDateTime(isoString) {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  return date.toLocaleString("he-IL");
-}
-
-function formatDateOnly(dateString) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("he-IL");
-}
-
-function formatTimeOnly(dateString) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleTimeString("he-IL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function escapeHtml(str = "") {
-  return String(str)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 // =========================
@@ -415,7 +585,7 @@ app.get("/", async (req, res) => {
       <div class="card">
         <h3>סטטוס מערכת</h3>
         <p class="muted">
-          האפליקציה מוכנה לעבודה. כרגע יש בה יומן, לקוחות, כרטסת צבע, הוספת תורים, עריכת לקוחות וחיפוש.
+          האפליקציה מוכנה לעבודה. יש בה יומן שבועי, לקוחות, כרטסת צבע, הוספת תורים, עריכת לקוחות וחיפוש.
         </p>
       </div>
     </div>
@@ -437,9 +607,7 @@ app.get("/auth", (req, res) => {
   const html = `
     <div class="card">
       <h2>חיבור ליומן גוגל</h2>
-      <p class="muted">
-        לחץ על הכפתור כדי לחבר את המערכת ליומן גוגל שלך.
-      </p>
+      <p class="muted">לחץ על הכפתור כדי לחבר את המערכת ליומן גוגל שלך.</p>
       <a class="btn" href="${url}">חבר עכשיו</a>
     </div>
   `;
@@ -464,7 +632,7 @@ app.get("/oauth2callback", async (req, res) => {
 });
 
 // =========================
-// EVENTS LIST
+// EVENTS - GOOGLE CALENDAR STYLE WEEK VIEW
 // =========================
 app.get("/events", async (req, res) => {
   if (!isGoogleConnected()) {
@@ -483,31 +651,109 @@ app.get("/events", async (req, res) => {
   }
 
   try {
+    const dateParam = req.query.date;
+    const selectedDate = dateParam ? new Date(dateParam) : new Date();
+    const weekStart = startOfWeek(selectedDate);
+    const weekEnd = addDays(weekStart, 7);
+
     const calendar = getCalendarClient();
     const response = await calendar.events.list({
       calendarId: "primary",
-      maxResults: 50,
       singleEvents: true,
       orderBy: "startTime",
-      timeMin: new Date().toISOString(),
+      timeMin: weekStart.toISOString(),
+      timeMax: weekEnd.toISOString(),
+      maxResults: 200,
     });
 
     const events = response.data.items || [];
+    const hours = [];
+    for (let h = 8; h <= 20; h++) {
+      hours.push(h);
+    }
 
-    let rows = "";
-    for (const event of events) {
-      const start = event.start.dateTime || event.start.date;
-      const end = event.end.dateTime || event.end.date;
-      rows += `
-        <tr>
-          <td>${escapeHtml(event.summary || "ללא כותרת")}</td>
-          <td>${formatDateOnly(start)}</td>
-          <td>${event.start.dateTime ? formatTimeOnly(start) : "אירוע יומי"}</td>
-          <td>${event.end.dateTime ? formatTimeOnly(end) : "-"}</td>
-          <td>${escapeHtml(event.description || "-")}</td>
-        </tr>
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      days.push(addDays(weekStart, i));
+    }
+
+    const prevWeek = toDateInputValue(addDays(weekStart, -7));
+    const nextWeek = toDateInputValue(addDays(weekStart, 7));
+    const todayValue = toDateInputValue(new Date());
+
+    let calendarHtml = `
+      <div class="calendar-toolbar">
+        <div class="right">
+          <a class="btn btn-light" href="/events?date=${prevWeek}">שבוע קודם</a>
+          <a class="btn btn-light" href="/events?date=${todayValue}">היום</a>
+          <a class="btn btn-light" href="/events?date=${nextWeek}">שבוע הבא</a>
+        </div>
+        <div class="left">
+          <div class="week-title">
+            שבוע של ${escapeHtml(getDayLabel(weekStart))} - ${escapeHtml(getDayLabel(addDays(weekStart, 6)))}
+          </div>
+          <a class="btn" href="/events/new">תור חדש</a>
+        </div>
+      </div>
+
+      <div class="calendar-shell">
+        <div class="calendar-grid">
+          <div class="time-header"></div>
+    `;
+
+    for (const day of days) {
+      calendarHtml += `
+        <div class="day-header">${escapeHtml(getDayLabel(day))}</div>
       `;
     }
+
+    for (const hour of hours) {
+      calendarHtml += `<div class="hour-label">${String(hour).padStart(2, "0")}:00</div>`;
+      for (let d = 0; d < 7; d++) {
+        calendarHtml += `<div class="day-cell"></div>`;
+      }
+    }
+
+    calendarHtml += `</div>`;
+
+    // overlay for events
+    calendarHtml += `<div class="calendar-grid" style="margin-top:-${(hours.length + 1) * 64}px; pointer-events:none;">`;
+    calendarHtml += `<div></div>`;
+
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const day = days[dayIndex];
+
+      calendarHtml += `<div class="day-column" style="position:relative; height:${hours.length * 64 + 56}px;">`;
+
+      for (const event of events) {
+        if (!event.start.dateTime || !event.end.dateTime) continue;
+
+        const start = new Date(event.start.dateTime);
+        const end = new Date(event.end.dateTime);
+
+        if (!sameDay(start, day)) continue;
+
+        const startHour = start.getHours() + start.getMinutes() / 60;
+        const endHour = end.getHours() + end.getMinutes() / 60;
+
+        const gridStart = 8;
+        const top = 56 + (startHour - gridStart) * 64;
+        const height = Math.max((endHour - startHour) * 64, 36);
+
+        if (endHour < 8 || startHour > 20) continue;
+
+        calendarHtml += `
+          <div class="event-block ${eventColorClass(event.summary || "")}" style="top:${top}px; height:${height}px;">
+            <div class="event-title">${escapeHtml(event.summary || "ללא כותרת")}</div>
+            <div class="event-time">${escapeHtml(formatTimeOnly(event.start.dateTime))} - ${escapeHtml(formatTimeOnly(event.end.dateTime))}</div>
+          </div>
+        `;
+      }
+
+      calendarHtml += `</div>`;
+    }
+
+    calendarHtml += `</div></div>`;
 
     const html = `
       <div class="section-title">יומן תורים</div>
@@ -519,26 +765,7 @@ app.get("/events", async (req, res) => {
         </div>
       </div>
 
-      <div class="card">
-        ${
-          events.length
-            ? `
-          <table>
-            <thead>
-              <tr>
-                <th>כותרת</th>
-                <th>תאריך</th>
-                <th>התחלה</th>
-                <th>סיום</th>
-                <th>הערות</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `
-            : `<div class="empty">אין תורים כרגע</div>`
-        }
-      </div>
+      ${calendarHtml}
     `;
 
     res.send(layout("יומן תורים", html));
@@ -549,13 +776,16 @@ app.get("/events", async (req, res) => {
 });
 
 // =========================
-// NEW EVENT FORM
+// NEW EVENT
 // =========================
 app.get("/events/new", (req, res) => {
   const clients = getClients();
 
   const clientOptions = clients
-    .map((c) => `<option value="${c.id}">${escapeHtml(c.name)} - ${escapeHtml(c.phone)}</option>`)
+    .map(
+      (c) =>
+        `<option value="${c.id}">${escapeHtml(c.name)} - ${escapeHtml(c.phone)}</option>`
+    )
     .join("");
 
   const html = `
@@ -619,19 +849,13 @@ app.get("/events/new", (req, res) => {
 
 app.post("/events/new", async (req, res) => {
   if (!isGoogleConnected()) {
-    return res.send(layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל דרך /auth</div>`));
+    return res.send(
+      layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל דרך /auth</div>`)
+    );
   }
 
   try {
-    const {
-      clientId,
-      service,
-      summary,
-      date,
-      startTime,
-      endTime,
-      description,
-    } = req.body;
+    const { clientId, service, summary, date, startTime, endTime, description } = req.body;
 
     let finalTitle = summary?.trim() || service;
     if (clientId) {
@@ -722,18 +946,18 @@ app.get("/clients", (req, res) => {
       ${
         clients.length
           ? `
-        <table>
-          <thead>
-            <tr>
-              <th>שם</th>
-              <th>טלפון</th>
-              <th>הערות</th>
-              <th>פעולות</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `
+          <table>
+            <thead>
+              <tr>
+                <th>שם</th>
+                <th>טלפון</th>
+                <th>הערות</th>
+                <th>פעולות</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `
           : `<div class="empty">אין לקוחות להצגה</div>`
       }
     </div>
@@ -890,11 +1114,6 @@ app.get("/clients/:id", (req, res) => {
         <div class="row-actions">
           <a class="btn" href="/clients/${client.id}/edit">עריכת לקוח</a>
           <a class="btn btn-light" href="/events/new">תור חדש</a>
-          ${
-            client.phone
-              ? `<a class="btn btn-green" href="https://wa.me/972${client.phone.replace(/^0/, "")}" target="_blank">וואטסאפ</a>`
-              : ""
-          }
         </div>
       </div>
 
