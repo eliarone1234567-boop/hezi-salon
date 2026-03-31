@@ -120,11 +120,9 @@ function formatTimeOnly(dateString) {
 
 function startOfWeek(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0 sun
-  const diff = day === 0 ? -6 : 1 - day; // Monday start
-  d.setDate(d.getDate() + diff);
+  const day = d.getDay(); // 0=Sunday
   d.setHours(0, 0, 0, 0);
-  return d;
+  return new Date(d.setDate(d.getDate() - day));
 }
 
 function addDays(date, days) {
@@ -220,7 +218,7 @@ function layout(title, content) {
       }
 
       .container {
-        max-width: 1400px;
+        max-width: 1500px;
         margin: 24px auto;
         padding: 0 16px;
       }
@@ -284,11 +282,6 @@ function layout(title, content) {
 
       .btn-danger {
         background: #b91c1c;
-        color: white;
-      }
-
-      .btn-green {
-        background: #047857;
         color: white;
       }
 
@@ -375,7 +368,7 @@ function layout(title, content) {
         margin-bottom: 10px;
       }
 
-      /* CALENDAR */
+      /* WEEKLY CALENDAR */
       .calendar-toolbar {
         display: flex;
         justify-content: space-between;
@@ -398,56 +391,71 @@ function layout(title, content) {
         font-weight: bold;
       }
 
-      .calendar-shell {
+      .calendar-wrapper {
         background: white;
         border-radius: 18px;
-        overflow: hidden;
+        overflow: auto;
         border: 1px solid #e5e7eb;
         box-shadow: 0 4px 18px rgba(0,0,0,0.05);
       }
 
-      .calendar-grid {
-        display: grid;
-        grid-template-columns: 70px repeat(7, 1fr);
+      .calendar-board {
+        min-width: 1100px;
       }
 
-      .time-header {
-        background: #f8fafc;
+      .calendar-header {
+        display: grid;
+        grid-template-columns: 80px repeat(7, 1fr);
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: white;
+      }
+
+      .corner-cell {
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
+        background: #f8fafc;
         min-height: 56px;
       }
 
       .day-header {
-        background: #f8fafc;
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
+        background: #f8fafc;
         min-height: 56px;
         padding: 10px;
         text-align: center;
         font-weight: bold;
       }
 
-      .hour-label {
+      .calendar-body {
+        display: grid;
+        grid-template-columns: 80px repeat(7, 1fr);
+      }
+
+      .time-col {
+        background: #fafafa;
+      }
+
+      .time-slot {
         height: 64px;
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
         padding: 8px;
         font-size: 12px;
         color: #6b7280;
-        background: #fafafa;
       }
 
-      .day-cell {
+      .day-col {
         position: relative;
+      }
+
+      .day-grid-line {
         height: 64px;
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
         background: white;
-      }
-
-      .day-column {
-        position: relative;
       }
 
       .event-block {
@@ -489,14 +497,6 @@ function layout(title, content) {
 
         .container {
           padding: 0 10px;
-        }
-
-        .calendar-shell {
-          overflow-x: auto;
-        }
-
-        .calendar-grid {
-          min-width: 900px;
         }
       }
     </style>
@@ -578,14 +578,14 @@ app.get("/", async (req, res) => {
           <a class="btn" href="/clients/new">לקוח חדש</a>
           <a class="btn" href="/events/new">תור חדש</a>
           <a class="btn btn-light" href="/clients">רשימת לקוחות</a>
-          <a class="btn btn-light" href="/events">יומן תורים</a>
+          <a class="btn btn-light" href="/events">יומן שבועי</a>
         </div>
       </div>
 
       <div class="card">
         <h3>סטטוס מערכת</h3>
         <p class="muted">
-          האפליקציה מוכנה לעבודה. יש בה יומן שבועי, לקוחות, כרטסת צבע, הוספת תורים, עריכת לקוחות וחיפוש.
+          האפליקציה כוללת יומן שבועי, לקוחות, כרטסת צבע, הוספת תורים, עריכת לקוחות וחיפוש.
         </p>
       </div>
     </div>
@@ -632,7 +632,7 @@ app.get("/oauth2callback", async (req, res) => {
 });
 
 // =========================
-// EVENTS - GOOGLE CALENDAR STYLE WEEK VIEW
+// WEEKLY EVENTS
 // =========================
 app.get("/events", async (req, res) => {
   if (!isGoogleConnected()) {
@@ -667,108 +667,97 @@ app.get("/events", async (req, res) => {
     });
 
     const events = response.data.items || [];
-    const hours = [];
-    for (let h = 8; h <= 20; h++) {
-      hours.push(h);
-    }
-
     const days = [];
     for (let i = 0; i < 7; i++) {
       days.push(addDays(weekStart, i));
+    }
+
+    const hours = [];
+    for (let h = 8; h <= 20; h++) {
+      hours.push(h);
     }
 
     const prevWeek = toDateInputValue(addDays(weekStart, -7));
     const nextWeek = toDateInputValue(addDays(weekStart, 7));
     const todayValue = toDateInputValue(new Date());
 
-    let calendarHtml = `
-      <div class="calendar-toolbar">
-        <div class="right">
-          <a class="btn btn-light" href="/events?date=${prevWeek}">שבוע קודם</a>
-          <a class="btn btn-light" href="/events?date=${todayValue}">היום</a>
-          <a class="btn btn-light" href="/events?date=${nextWeek}">שבוע הבא</a>
-        </div>
-        <div class="left">
-          <div class="week-title">
-            שבוע של ${escapeHtml(getDayLabel(weekStart))} - ${escapeHtml(getDayLabel(addDays(weekStart, 6)))}
-          </div>
-          <a class="btn" href="/events/new">תור חדש</a>
-        </div>
-      </div>
+    let headers = `<div class="corner-cell"></div>`;
+    for (const day of days) {
+      headers += `<div class="day-header">${escapeHtml(getDayLabel(day))}</div>`;
+    }
 
-      <div class="calendar-shell">
-        <div class="calendar-grid">
-          <div class="time-header"></div>
-    `;
+    let body = `<div class="time-col">`;
+    for (const hour of hours) {
+      body += `<div class="time-slot">${String(hour).padStart(2, "0")}:00</div>`;
+    }
+    body += `</div>`;
 
     for (const day of days) {
-      calendarHtml += `
-        <div class="day-header">${escapeHtml(getDayLabel(day))}</div>
-      `;
-    }
+      let columnHtml = `<div class="day-col">`;
 
-    for (const hour of hours) {
-      calendarHtml += `<div class="hour-label">${String(hour).padStart(2, "0")}:00</div>`;
-      for (let d = 0; d < 7; d++) {
-        calendarHtml += `<div class="day-cell"></div>`;
+      for (const hour of hours) {
+        columnHtml += `<div class="day-grid-line"></div>`;
       }
-    }
-
-    calendarHtml += `</div>`;
-
-    // overlay for events
-    calendarHtml += `<div class="calendar-grid" style="margin-top:-${(hours.length + 1) * 64}px; pointer-events:none;">`;
-    calendarHtml += `<div></div>`;
-
-    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-      const day = days[dayIndex];
-
-      calendarHtml += `<div class="day-column" style="position:relative; height:${hours.length * 64 + 56}px;">`;
 
       for (const event of events) {
-        if (!event.start.dateTime || !event.end.dateTime) continue;
+        if (!event.start?.dateTime || !event.end?.dateTime) continue;
 
         const start = new Date(event.start.dateTime);
         const end = new Date(event.end.dateTime);
 
         if (!sameDay(start, day)) continue;
 
-        const startHour = start.getHours() + start.getMinutes() / 60;
-        const endHour = end.getHours() + end.getMinutes() / 60;
+        const startHourValue = start.getHours() + start.getMinutes() / 60;
+        const endHourValue = end.getHours() + end.getMinutes() / 60;
 
-        const gridStart = 8;
-        const top = 56 + (startHour - gridStart) * 64;
-        const height = Math.max((endHour - startHour) * 64, 36);
+        if (endHourValue <= 8 || startHourValue >= 21) continue;
 
-        if (endHour < 8 || startHour > 20) continue;
+        const top = Math.max((startHourValue - 8) * 64, 0);
+        const height = Math.max((endHourValue - startHourValue) * 64, 36);
 
-        calendarHtml += `
-          <div class="event-block ${eventColorClass(event.summary || "")}" style="top:${top}px; height:${height}px;">
+        columnHtml += `
+          <div class="event-block ${eventColorClass(event.summary || "")}" style="top:${top}px;height:${height}px;">
             <div class="event-title">${escapeHtml(event.summary || "ללא כותרת")}</div>
             <div class="event-time">${escapeHtml(formatTimeOnly(event.start.dateTime))} - ${escapeHtml(formatTimeOnly(event.end.dateTime))}</div>
           </div>
         `;
       }
 
-      calendarHtml += `</div>`;
+      columnHtml += `</div>`;
+      body += columnHtml;
     }
 
-    calendarHtml += `</div></div>`;
-
     const html = `
-      <div class="section-title">יומן תורים</div>
+      <div class="section-title">יומן שבועי</div>
 
-      <div class="card" style="margin-bottom:16px">
-        <div class="row-actions">
+      <div class="calendar-toolbar">
+        <div class="right">
+          <a class="btn btn-light" href="/events?date=${prevWeek}">שבוע קודם</a>
+          <a class="btn btn-light" href="/events?date=${todayValue}">השבוע הנוכחי</a>
+          <a class="btn btn-light" href="/events?date=${nextWeek}">שבוע הבא</a>
+        </div>
+
+        <div class="left">
+          <div class="week-title">
+            ${escapeHtml(formatDateOnly(weekStart))} - ${escapeHtml(formatDateOnly(addDays(weekStart, 6)))}
+          </div>
           <a class="btn" href="/events/new">תור חדש</a>
-          <a class="btn btn-light" href="/auth">חיבור מחדש לגוגל</a>
         </div>
       </div>
 
-      ${calendarHtml}
+      <div class="calendar-wrapper">
+        <div class="calendar-board">
+          <div class="calendar-header">
+            ${headers}
+          </div>
+          <div class="calendar-body">
+            ${body}
+          </div>
+        </div>
+      </div>
     `;
 
-    res.send(layout("יומן תורים", html));
+    res.send(layout("יומן שבועי", html));
   } catch (err) {
     console.log(err);
     res.send(layout("שגיאה", `<div class="card">❌ שגיאה בטעינת היומן</div>`));
@@ -783,8 +772,7 @@ app.get("/events/new", (req, res) => {
 
   const clientOptions = clients
     .map(
-      (c) =>
-        `<option value="${c.id}">${escapeHtml(c.name)} - ${escapeHtml(c.phone)}</option>`
+      (c) => `<option value="${c.id}">${escapeHtml(c.name)} - ${escapeHtml(c.phone)}</option>`
     )
     .join("");
 
