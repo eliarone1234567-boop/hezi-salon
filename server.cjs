@@ -10,15 +10,12 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =========================
-// PATHS
+// FILES
 // =========================
 const DATA_DIR = __dirname;
 const TOKEN_PATH = path.join(DATA_DIR, "token.json");
 const CLIENTS_PATH = path.join(DATA_DIR, "clients.json");
 
-// =========================
-// FILE HELPERS
-// =========================
 function ensureFile(filePath, defaultValue) {
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, JSON.stringify(defaultValue, null, 2), "utf8");
@@ -30,7 +27,7 @@ ensureFile(CLIENTS_PATH, []);
 function readJson(filePath, fallback = null) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (e) {
+  } catch {
     return fallback;
   }
 }
@@ -48,16 +45,17 @@ function saveClients(clients) {
 }
 
 function getClientById(id) {
-  const clients = getClients();
-  return clients.find((c) => c.id === id);
+  return getClients().find((c) => c.id === id);
 }
 
 function generateId() {
-  return Date.now().toString() + Math.floor(Math.random() * 10000).toString();
+  return (
+    Date.now().toString() + Math.floor(Math.random() * 100000).toString()
+  );
 }
 
 // =========================
-// GOOGLE OAUTH
+// GOOGLE
 // =========================
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
@@ -71,9 +69,7 @@ const oauth2Client = new google.auth.OAuth2(
 
 if (fs.existsSync(TOKEN_PATH)) {
   const tokens = readJson(TOKEN_PATH, null);
-  if (tokens) {
-    oauth2Client.setCredentials(tokens);
-  }
+  if (tokens) oauth2Client.setCredentials(tokens);
 }
 
 function isGoogleConnected() {
@@ -105,14 +101,12 @@ function escapeHtml(str = "") {
 
 function formatDateOnly(dateString) {
   if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("he-IL");
+  return new Date(dateString).toLocaleDateString("he-IL");
 }
 
 function formatTimeOnly(dateString) {
   if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleTimeString("he-IL", {
+  return new Date(dateString).toLocaleTimeString("he-IL", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -120,20 +114,39 @@ function formatTimeOnly(dateString) {
 
 function formatDateTime(dateString) {
   if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleString("he-IL");
+  return new Date(dateString).toLocaleString("he-IL");
 }
 
 function startOfWeek(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sun
+  const day = d.getDay(); // 0 ראשון
   d.setHours(0, 0, 0, 0);
-  return new Date(d.setDate(d.getDate() - day));
+  d.setDate(d.getDate() - day);
+  return d;
+}
+
+function startOfMonth(date) {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfMonth(date) {
+  const d = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  d.setHours(23, 59, 59, 999);
+  return d;
 }
 
 function addDays(date, days) {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
+  return d;
+}
+
+function addMonths(date, months) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
   return d;
 }
 
@@ -161,6 +174,34 @@ function getDayLabel(date) {
     day: "2-digit",
     month: "2-digit",
   });
+}
+
+function getMonthLabel(date) {
+  return new Date(date).toLocaleDateString("he-IL", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function clientDisplayName(client) {
+  return [client.firstName, client.lastName].filter(Boolean).join(" ").trim();
+}
+
+function normalizePhone(phone = "") {
+  return phone.replace(/\D/g, "");
+}
+
+function whatsappLink(phone, name = "") {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return "#";
+  let international = normalized;
+  if (international.startsWith("0")) {
+    international = "972" + international.slice(1);
+  }
+  const text = encodeURIComponent(
+    `היי ${name || ""}, תזכורת מהמספרה של חזי 💇‍♂️`
+  );
+  return `https://wa.me/${international}?text=${text}`;
 }
 
 function eventColorClass(colorId = "", summary = "") {
@@ -207,39 +248,48 @@ function googleColorOptions(selected = "") {
   return colors
     .map(
       (c) =>
-        `<option value="${c.id}" ${String(selected) === String(c.id) ? "selected" : ""}>${c.name}</option>`
+        `<option value="${c.id}" ${
+          String(selected) === String(c.id) ? "selected" : ""
+        }>${c.name}</option>`
     )
     .join("");
 }
 
-function clientDisplayName(client) {
-  return [client.firstName, client.lastName].filter(Boolean).join(" ").trim();
-}
-
-function normalizePhone(phone = "") {
-  return phone.replace(/\D/g, "");
-}
-
-function whatsappLink(phone, name = "") {
-  const normalized = normalizePhone(phone);
-  if (!normalized) return "#";
-
-  let international = normalized;
-  if (international.startsWith("0")) {
-    international = "972" + international.slice(1);
-  }
-
-  const text = encodeURIComponent(
-    `היי ${name || ""},\nתזכורת מהמספרה של חזי 💇‍♂️`
+function calendarEventClientId(event) {
+  return (
+    event?.extendedProperties?.private?.clientId ||
+    event?.extendedProperties?.shared?.clientId ||
+    ""
   );
+}
 
-  return `https://wa.me/${international}?text=${text}`;
+function calendarEventService(event) {
+  return (
+    event?.extendedProperties?.private?.service ||
+    event?.extendedProperties?.shared?.service ||
+    ""
+  );
+}
+
+function parseEventToForm(event) {
+  return {
+    id: event.id,
+    summary: event.summary || "",
+    description: event.description || "",
+    startDate: event.start?.dateTime ? toDateInputValue(event.start.dateTime) : "",
+    startTime: event.start?.dateTime ? formatTimeOnly(event.start.dateTime) : "",
+    endDate: event.end?.dateTime ? toDateInputValue(event.end.dateTime) : "",
+    endTime: event.end?.dateTime ? formatTimeOnly(event.end.dateTime) : "",
+    colorId: event.colorId || "",
+    clientId: calendarEventClientId(event),
+    service: calendarEventService(event),
+  };
 }
 
 // =========================
-// UI LAYOUT
+// HTML LAYOUT
 // =========================
-function layout(title, content) {
+function layout(title, content, extraScripts = "") {
   return `
   <html dir="rtl" lang="he">
   <head>
@@ -248,14 +298,12 @@ function layout(title, content) {
     <title>${title}</title>
     <style>
       * { box-sizing: border-box; }
-
       body {
         margin: 0;
         font-family: Arial, sans-serif;
         background: #f5f7fb;
         color: #1f2937;
       }
-
       .topbar {
         background: linear-gradient(90deg, #111827, #1f2937);
         color: white;
@@ -265,52 +313,41 @@ function layout(title, content) {
         align-items: center;
         gap: 16px;
       }
-
       .brand {
         font-size: 24px;
         font-weight: bold;
       }
-
       .nav {
         display: flex;
         flex-wrap: wrap;
         gap: 14px;
       }
-
       .nav a {
         color: white;
         text-decoration: none;
         font-size: 14px;
       }
-
-      .nav a:hover {
-        text-decoration: underline;
-      }
-
+      .nav a:hover { text-decoration: underline; }
       .container {
         max-width: 1500px;
         margin: 24px auto;
         padding: 0 16px;
       }
-
       .section-title {
         margin-bottom: 14px;
         font-size: 26px;
         font-weight: bold;
       }
-
       .grid-2 {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 16px;
       }
-
       .grid-3 {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
       }
-
       .card {
         background: white;
         border-radius: 18px;
@@ -318,21 +355,15 @@ function layout(title, content) {
         box-shadow: 0 4px 18px rgba(0,0,0,0.05);
         border: 1px solid #e9edf5;
       }
-
-      .card h2, .card h3 {
-        margin-top: 0;
-      }
-
+      .card h2, .card h3 { margin-top: 0; }
       .muted {
         color: #6b7280;
         font-size: 14px;
       }
-
       .stat {
         font-size: 32px;
         font-weight: bold;
       }
-
       .btn {
         display: inline-block;
         border: none;
@@ -344,28 +375,23 @@ function layout(title, content) {
         background: #111827;
         color: white;
       }
-
       .btn-light {
         background: #e5e7eb;
         color: #111827;
       }
-
       .btn-danger {
         background: #b91c1c;
         color: white;
       }
-
       .btn-green {
         background: #047857;
         color: white;
       }
-
       .row-actions {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
       }
-
       input, select, textarea {
         width: 100%;
         padding: 10px 12px;
@@ -374,51 +400,40 @@ function layout(title, content) {
         font-size: 14px;
         background: white;
       }
-
       textarea {
         min-height: 90px;
         resize: vertical;
       }
-
-      .form-group {
-        margin-bottom: 14px;
-      }
-
+      .form-group { margin-bottom: 14px; }
       label {
         display: block;
         margin-bottom: 8px;
         font-weight: bold;
       }
-
       table {
         width: 100%;
         border-collapse: collapse;
       }
-
       th, td {
         padding: 12px;
         border-bottom: 1px solid #edf0f5;
         text-align: right;
         vertical-align: top;
       }
-
       th {
         background: #f8fafc;
         font-weight: bold;
       }
-
       .empty {
         padding: 24px;
         text-align: center;
         color: #6b7280;
       }
-
       .search-box {
         display: grid;
         grid-template-columns: 1fr auto;
         gap: 10px;
       }
-
       .pill {
         display: inline-block;
         padding: 6px 10px;
@@ -426,23 +441,14 @@ function layout(title, content) {
         font-size: 12px;
         background: #e5e7eb;
       }
-
       .pill.green {
         background: #d1fae5;
         color: #065f46;
       }
-
       .pill.red {
         background: #fee2e2;
         color: #991b1b;
       }
-
-      .color-note {
-        border-right: 4px solid #111827;
-        padding-right: 10px;
-        margin-bottom: 10px;
-      }
-
       .client-photo {
         width: 140px;
         height: 140px;
@@ -452,7 +458,6 @@ function layout(title, content) {
         background: #f3f4f6;
       }
 
-      /* WEEKLY CALENDAR */
       .calendar-toolbar {
         display: flex;
         justify-content: space-between;
@@ -461,7 +466,6 @@ function layout(title, content) {
         margin-bottom: 16px;
         flex-wrap: wrap;
       }
-
       .calendar-toolbar .left,
       .calendar-toolbar .right {
         display: flex;
@@ -469,10 +473,27 @@ function layout(title, content) {
         align-items: center;
         flex-wrap: wrap;
       }
-
       .week-title {
         font-size: 18px;
         font-weight: bold;
+      }
+      .view-switch {
+        display: flex;
+        gap: 8px;
+      }
+
+      .search-results {
+        margin-bottom: 16px;
+      }
+      .history-list {
+        display: grid;
+        gap: 10px;
+      }
+      .history-item {
+        background: white;
+        border: 1px solid #e9edf5;
+        border-radius: 14px;
+        padding: 14px;
       }
 
       .calendar-wrapper {
@@ -482,11 +503,9 @@ function layout(title, content) {
         border: 1px solid #e5e7eb;
         box-shadow: 0 4px 18px rgba(0,0,0,0.05);
       }
-
       .calendar-board {
         min-width: 1100px;
       }
-
       .calendar-header {
         display: grid;
         grid-template-columns: 80px repeat(7, 1fr);
@@ -495,14 +514,12 @@ function layout(title, content) {
         z-index: 2;
         background: white;
       }
-
       .corner-cell {
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
         background: #f8fafc;
         min-height: 56px;
       }
-
       .day-header {
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
@@ -512,11 +529,9 @@ function layout(title, content) {
         text-align: center;
         font-weight: bold;
       }
-
       .day-header-top {
         margin-bottom: 8px;
       }
-
       .day-add {
         display: inline-block;
         font-size: 12px;
@@ -526,16 +541,13 @@ function layout(title, content) {
         color: white;
         text-decoration: none;
       }
-
       .calendar-body {
         display: grid;
         grid-template-columns: 80px repeat(7, 1fr);
       }
-
       .time-col {
         background: #fafafa;
       }
-
       .time-slot {
         height: 64px;
         border-left: 1px solid #edf0f5;
@@ -544,18 +556,19 @@ function layout(title, content) {
         font-size: 12px;
         color: #6b7280;
       }
-
       .day-col {
         position: relative;
       }
-
       .day-grid-line {
         height: 64px;
         border-left: 1px solid #edf0f5;
         border-bottom: 1px solid #edf0f5;
         background: white;
+        cursor: pointer;
       }
-
+      .day-grid-line:hover {
+        background: #f0f7ff;
+      }
       .event-block {
         position: absolute;
         right: 6px;
@@ -567,15 +580,132 @@ function layout(title, content) {
         overflow: hidden;
         box-shadow: 0 2px 8px rgba(0,0,0,0.12);
       }
-
       .event-title {
         font-weight: bold;
         margin-bottom: 4px;
       }
-
       .event-time {
         font-size: 11px;
         opacity: 0.95;
+      }
+      .event-links {
+        margin-top: 6px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .event-link {
+        color: white;
+        font-size: 11px;
+        text-decoration: underline;
+      }
+
+      .day-view {
+        background: white;
+        border-radius: 18px;
+        border: 1px solid #e5e7eb;
+        overflow: hidden;
+      }
+      .day-view-grid {
+        display: grid;
+        grid-template-columns: 90px 1fr;
+      }
+      .day-hour {
+        height: 70px;
+        border-bottom: 1px solid #edf0f5;
+        padding: 10px;
+        background: #fafafa;
+        color: #6b7280;
+        font-size: 12px;
+      }
+      .day-cell {
+        height: 70px;
+        border-bottom: 1px solid #edf0f5;
+        position: relative;
+        background: white;
+        cursor: pointer;
+      }
+      .day-cell:hover {
+        background: #f0f7ff;
+      }
+      .day-events-layer {
+        position: relative;
+      }
+      .day-event-block {
+        position: absolute;
+        right: 8px;
+        left: 8px;
+        border-radius: 10px;
+        padding: 8px;
+        color: white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      }
+
+      .month-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1px;
+        background: #e5e7eb;
+        border-radius: 18px;
+        overflow: hidden;
+      }
+      .month-head {
+        background: #f8fafc;
+        padding: 12px;
+        font-weight: bold;
+        text-align: center;
+      }
+      .month-cell {
+        background: white;
+        min-height: 140px;
+        padding: 10px;
+      }
+      .month-date {
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+      .month-item {
+        display: block;
+        padding: 6px 8px;
+        margin-bottom: 6px;
+        border-radius: 8px;
+        color: white;
+        font-size: 12px;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 9999;
+      }
+      .modal-backdrop.open {
+        display: flex;
+      }
+      .modal {
+        background: white;
+        width: 100%;
+        max-width: 700px;
+        border-radius: 18px;
+        padding: 20px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      .close-btn {
+        border: none;
+        background: #e5e7eb;
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
       }
 
       .event-color-blue { background: #1a73e8; }
@@ -588,11 +718,9 @@ function layout(title, content) {
         .grid-2, .grid-3 {
           grid-template-columns: 1fr;
         }
-
         .topbar {
           display: block;
         }
-
         .container {
           padding: 0 10px;
         }
@@ -615,286 +743,27 @@ function layout(title, content) {
     <div class="container">
       ${content}
     </div>
+
+    ${extraScripts}
   </body>
   </html>
   `;
 }
 
 // =========================
-// HOME
-// =========================
-app.get("/", async (req, res) => {
-  const clients = getClients();
-  let upcomingCount = 0;
-
-  if (isGoogleConnected()) {
-    try {
-      const calendar = getCalendarClient();
-      const response = await calendar.events.list({
-        calendarId: "primary",
-        maxResults: 10,
-        singleEvents: true,
-        orderBy: "startTime",
-        timeMin: new Date().toISOString(),
-      });
-      upcomingCount = (response.data.items || []).length;
-    } catch (e) {
-      upcomingCount = 0;
-    }
-  }
-
-  const html = `
-    <div class="section-title">דשבורד</div>
-
-    <div class="grid-3">
-      <div class="card">
-        <div class="muted">לקוחות</div>
-        <div class="stat">${clients.length}</div>
-      </div>
-      <div class="card">
-        <div class="muted">תורים קרובים</div>
-        <div class="stat">${upcomingCount}</div>
-      </div>
-      <div class="card">
-        <div class="muted">חיבור לגוגל</div>
-        <div class="stat">
-          ${
-            isGoogleConnected()
-              ? `<span class="pill green">מחובר</span>`
-              : `<span class="pill red">לא מחובר</span>`
-          }
-        </div>
-      </div>
-    </div>
-
-    <div style="height:16px"></div>
-
-    <div class="grid-2">
-      <div class="card">
-        <h3>פעולות מהירות</h3>
-        <div class="row-actions">
-          <a class="btn" href="/clients/new">לקוח חדש</a>
-          <a class="btn" href="/events/new">תור חדש</a>
-          <a class="btn btn-light" href="/clients">רשימת לקוחות</a>
-          <a class="btn btn-light" href="/events">יומן שבועי</a>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>סטטוס מערכת</h3>
-        <p class="muted">
-          האפליקציה כוללת יומן שבועי, חיפוש ביומן, הוספת תור, ניהול לקוחות, תמונת לקוח, כרטסת צבע והיסטוריית טיפולים.
-        </p>
-      </div>
-    </div>
-  `;
-
-  res.send(layout("דשבורד", html));
-});
-
-// =========================
-// GOOGLE AUTH
-// =========================
-app.get("/auth", (req, res) => {
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: ["https://www.googleapis.com/auth/calendar"],
-    prompt: "consent",
-  });
-
-  const html = `
-    <div class="card">
-      <h2>חיבור ליומן גוגל</h2>
-      <p class="muted">לחץ על הכפתור כדי לחבר את המערכת ליומן גוגל שלך.</p>
-      <a class="btn" href="${url}">חבר עכשיו</a>
-    </div>
-  `;
-
-  res.send(layout("חיבור לגוגל", html));
-});
-
-app.get("/oauth2callback", async (req, res) => {
-  try {
-    const { tokens } = await oauth2Client.getToken(req.query.code);
-    saveTokens(tokens);
-    res.send(
-      layout(
-        "חיבור הצליח",
-        `<div class="card"><h2>החיבור הצליח ✅</h2><a class="btn" href="/events">עבור ליומן</a></div>`
-      )
-    );
-  } catch (err) {
-    console.log(err);
-    res.send(layout("שגיאה", `<div class="card">❌ שגיאה בהתחברות</div>`));
-  }
-});
-
-// =========================
-// WEEKLY CALENDAR + SEARCH
-// =========================
-app.get("/events", async (req, res) => {
-  if (!isGoogleConnected()) {
-    return res.send(
-      layout(
-        "יומן",
-        `
-        <div class="card">
-          <h2>היומן עדיין לא מחובר</h2>
-          <p class="muted">לפני שמציגים תורים צריך לחבר את גוגל.</p>
-          <a class="btn" href="/auth">חבר לגוגל</a>
-        </div>
-      `
-      )
-    );
-  }
-
-  try {
-    const q = (req.query.q || "").trim();
-    const dateParam = req.query.date;
-    const selectedDate = dateParam ? new Date(dateParam) : new Date();
-    const weekStart = startOfWeek(selectedDate);
-    const weekEnd = addDays(weekStart, 7);
-
-    const calendar = getCalendarClient();
-    const response = await calendar.events.list({
-      calendarId: "primary",
-      singleEvents: true,
-      orderBy: "startTime",
-      timeMin: weekStart.toISOString(),
-      timeMax: weekEnd.toISOString(),
-      maxResults: 200,
-    });
-
-    let events = response.data.items || [];
-
-    if (q) {
-      events = events.filter((event) => {
-        const text = `${event.summary || ""} ${event.description || ""}`.toLowerCase();
-        return text.includes(q.toLowerCase());
-      });
-    }
-
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      days.push(addDays(weekStart, i));
-    }
-
-    const hours = [];
-    for (let h = 8; h <= 20; h++) {
-      hours.push(h);
-    }
-
-    const prevWeek = toDateInputValue(addDays(weekStart, -7));
-    const nextWeek = toDateInputValue(addDays(weekStart, 7));
-    const todayValue = toDateInputValue(new Date());
-
-    let headers = `<div class="corner-cell"></div>`;
-    for (const day of days) {
-      headers += `
-        <div class="day-header">
-          <div class="day-header-top">${escapeHtml(getDayLabel(day))}</div>
-          <a class="day-add" href="/events/new?date=${toDateInputValue(day)}">+ תור</a>
-        </div>
-      `;
-    }
-
-    let body = `<div class="time-col">`;
-    for (const hour of hours) {
-      body += `<div class="time-slot">${String(hour).padStart(2, "0")}:00</div>`;
-    }
-    body += `</div>`;
-
-    for (const day of days) {
-      let columnHtml = `<div class="day-col">`;
-
-      for (const hour of hours) {
-        columnHtml += `<div class="day-grid-line"></div>`;
-      }
-
-      for (const event of events) {
-        if (!event.start?.dateTime || !event.end?.dateTime) continue;
-
-        const start = new Date(event.start.dateTime);
-        const end = new Date(event.end.dateTime);
-
-        if (!sameDay(start, day)) continue;
-
-        const startHourValue = start.getHours() + start.getMinutes() / 60;
-        const endHourValue = end.getHours() + end.getMinutes() / 60;
-
-        if (endHourValue <= 8 || startHourValue >= 21) continue;
-
-        const top = Math.max((startHourValue - 8) * 64, 0);
-        const height = Math.max((endHourValue - startHourValue) * 64, 36);
-
-        columnHtml += `
-          <div class="event-block ${eventColorClass(event.colorId, event.summary || "")}" style="top:${top}px;height:${height}px;">
-            <div class="event-title">${escapeHtml(event.summary || "ללא כותרת")}</div>
-            <div class="event-time">${escapeHtml(formatTimeOnly(event.start.dateTime))} - ${escapeHtml(formatTimeOnly(event.end.dateTime))}</div>
-          </div>
-        `;
-      }
-
-      columnHtml += `</div>`;
-      body += columnHtml;
-    }
-
-    const html = `
-      <div class="section-title">יומן שבועי</div>
-
-      <div class="calendar-toolbar">
-        <div class="right">
-          <a class="btn btn-light" href="/events?date=${prevWeek}&q=${encodeURIComponent(q)}">שבוע קודם</a>
-          <a class="btn btn-light" href="/events?date=${todayValue}">השבוע הנוכחי</a>
-          <a class="btn btn-light" href="/events?date=${nextWeek}&q=${encodeURIComponent(q)}">שבוע הבא</a>
-        </div>
-
-        <div class="left">
-          <div class="week-title">
-            ${escapeHtml(formatDateOnly(weekStart))} - ${escapeHtml(formatDateOnly(addDays(weekStart, 6)))}
-          </div>
-          <a class="btn" href="/events/new">תור חדש</a>
-        </div>
-      </div>
-
-      <div class="card" style="margin-bottom:16px">
-        <form method="GET" action="/events" class="search-box">
-          <input type="hidden" name="date" value="${toDateInputValue(weekStart)}" />
-          <input name="q" value="${escapeHtml(q)}" placeholder="חיפוש ביומן לפי שם לקוח / כותרת / הערות" />
-          <button class="btn" type="submit">חפש</button>
-        </form>
-      </div>
-
-      <div class="calendar-wrapper">
-        <div class="calendar-board">
-          <div class="calendar-header">
-            ${headers}
-          </div>
-          <div class="calendar-body">
-            ${body}
-          </div>
-        </div>
-      </div>
-    `;
-
-    res.send(layout("יומן שבועי", html));
-  } catch (err) {
-    console.log(err);
-    res.send(layout("שגיאה", `<div class="card">❌ שגיאה בטעינת היומן</div>`));
-  }
-});
-
-// =========================
-// NEW EVENT
+// NEW EVENT ROUTE
 // =========================
 app.get("/events/new", (req, res) => {
   const clients = getClients();
   const prefilledDate = req.query.date || "";
+  const prefilledHour = req.query.hour || "";
 
   const clientOptions = clients
     .map((c) => {
       const fullName = clientDisplayName(c) || c.phone || "לקוח";
-      return `<option value="${c.id}">${escapeHtml(fullName)} - ${escapeHtml(c.phone || "")}</option>`;
+      return `<option value="${c.id}">${escapeHtml(fullName)} - ${escapeHtml(
+        c.phone || ""
+      )}</option>`;
     })
     .join("");
 
@@ -935,12 +804,18 @@ app.get("/events/new", (req, res) => {
 
           <div class="form-group">
             <label>שעת התחלה</label>
-            <input type="time" name="startTime" required />
+            <input type="time" name="startTime" value="${
+              prefilledHour ? String(prefilledHour).padStart(2, "0") + ":00" : ""
+            }" required />
           </div>
 
           <div class="form-group">
             <label>שעת סיום</label>
-            <input type="time" name="endTime" required />
+            <input type="time" name="endTime" value="${
+              prefilledHour
+                ? String(Math.min(parseInt(prefilledHour, 10) + 1, 23)).padStart(2, "0") + ":00"
+                : ""
+            }" required />
           </div>
 
           <div class="form-group">
@@ -954,7 +829,7 @@ app.get("/events/new", (req, res) => {
 
         <div class="form-group">
           <label>הערות</label>
-          <textarea name="description" placeholder="הערות על התור"></textarea>
+          <textarea name="description"></textarea>
         </div>
 
         <button class="btn" type="submit">שמור תור</button>
@@ -967,9 +842,7 @@ app.get("/events/new", (req, res) => {
 
 app.post("/events/new", async (req, res) => {
   if (!isGoogleConnected()) {
-    return res.send(
-      layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל דרך /auth</div>`)
-    );
+    return res.send(layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל דרך /auth</div>`));
   }
 
   try {
@@ -989,12 +862,10 @@ app.post("/events/new", async (req, res) => {
 
     if (clientId) {
       const client = getClientById(clientId);
-
       if (client) {
         if (!summary?.trim()) {
           finalTitle = `${clientDisplayName(client)} - ${service}`;
         }
-
         if (!finalColorId && client.defaultColorId) {
           finalColorId = client.defaultColorId;
         }
@@ -1011,6 +882,12 @@ app.post("/events/new", async (req, res) => {
         summary: finalTitle,
         description: description || "",
         colorId: finalColorId || undefined,
+        extendedProperties: {
+          private: {
+            clientId: clientId || "",
+            service: service || "",
+          },
+        },
         start: {
           dateTime: startDateTime.toISOString(),
           timeZone: "Asia/Jerusalem",
@@ -1022,7 +899,6 @@ app.post("/events/new", async (req, res) => {
       },
     });
 
-    // save treatment history into client card
     if (clientId) {
       const clients = getClients();
       const client = clients.find((c) => c.id === clientId);
@@ -1047,7 +923,193 @@ app.post("/events/new", async (req, res) => {
 });
 
 // =========================
-// CLIENTS LIST + SEARCH
+// EDIT EVENT
+// =========================
+app.get("/events/:id/edit", async (req, res) => {
+  if (!isGoogleConnected()) {
+    return res.send(layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל</div>`));
+  }
+
+  try {
+    const calendar = getCalendarClient();
+    const response = await calendar.events.get({
+      calendarId: "primary",
+      eventId: req.params.id,
+    });
+
+    const event = response.data;
+    const form = parseEventToForm(event);
+    const clients = getClients();
+
+    const clientOptions = clients
+      .map((c) => {
+        const fullName = clientDisplayName(c) || c.phone || "לקוח";
+        return `<option value="${c.id}" ${
+          String(form.clientId) === String(c.id) ? "selected" : ""
+        }>${escapeHtml(fullName)} - ${escapeHtml(c.phone || "")}</option>`;
+      })
+      .join("");
+
+    const html = `
+      <div class="section-title">עריכת תור</div>
+      <div class="card">
+        <form method="POST" action="/events/${event.id}/edit">
+          <div class="grid-2">
+            <div class="form-group">
+              <label>לקוח</label>
+              <select name="clientId">
+                <option value="">ללא בחירה</option>
+                ${clientOptions}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>סוג שירות</label>
+              <input name="service" value="${escapeHtml(form.service || "")}" />
+            </div>
+
+            <div class="form-group">
+              <label>כותרת</label>
+              <input name="summary" value="${escapeHtml(form.summary)}" />
+            </div>
+
+            <div class="form-group">
+              <label>תאריך</label>
+              <input type="date" name="date" value="${escapeHtml(form.startDate)}" required />
+            </div>
+
+            <div class="form-group">
+              <label>שעת התחלה</label>
+              <input type="time" name="startTime" value="${escapeHtml(form.startTime)}" required />
+            </div>
+
+            <div class="form-group">
+              <label>שעת סיום</label>
+              <input type="time" name="endTime" value="${escapeHtml(form.endTime)}" required />
+            </div>
+
+            <div class="form-group">
+              <label>צבע לתור</label>
+              <select name="colorId">
+                <option value="">לפי ברירת מחדל</option>
+                ${googleColorOptions(form.colorId || "")}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>הערות</label>
+            <textarea name="description">${escapeHtml(form.description || "")}</textarea>
+          </div>
+
+          <div class="row-actions">
+            <button class="btn" type="submit">שמור שינויים</button>
+          </div>
+        </form>
+
+        <div style="height:12px"></div>
+
+        <form method="POST" action="/events/${event.id}/delete" onsubmit="return confirm('למחוק תור?')">
+          <button class="btn btn-danger" type="submit">מחק תור</button>
+        </form>
+      </div>
+    `;
+
+    res.send(layout("עריכת תור", html));
+  } catch (err) {
+    console.log(err);
+    res.send(layout("שגיאה", `<div class="card">❌ שגיאה בטעינת התור</div>`));
+  }
+});
+
+app.post("/events/:id/edit", async (req, res) => {
+  if (!isGoogleConnected()) {
+    return res.send(layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל</div>`));
+  }
+
+  try {
+    const {
+      clientId,
+      service,
+      summary,
+      date,
+      startTime,
+      endTime,
+      description,
+      colorId,
+    } = req.body;
+
+    let finalTitle = summary?.trim() || service;
+    let finalColorId = colorId || "";
+
+    if (clientId) {
+      const client = getClientById(clientId);
+      if (client) {
+        if (!summary?.trim()) {
+          finalTitle = `${clientDisplayName(client)} - ${service}`;
+        }
+        if (!finalColorId && client.defaultColorId) {
+          finalColorId = client.defaultColorId;
+        }
+      }
+    }
+
+    const startDateTime = new Date(`${date}T${startTime}:00`);
+    const endDateTime = new Date(`${date}T${endTime}:00`);
+
+    const calendar = getCalendarClient();
+    await calendar.events.update({
+      calendarId: "primary",
+      eventId: req.params.id,
+      requestBody: {
+        summary: finalTitle,
+        description: description || "",
+        colorId: finalColorId || undefined,
+        extendedProperties: {
+          private: {
+            clientId: clientId || "",
+            service: service || "",
+          },
+        },
+        start: {
+          dateTime: startDateTime.toISOString(),
+          timeZone: "Asia/Jerusalem",
+        },
+        end: {
+          dateTime: endDateTime.toISOString(),
+          timeZone: "Asia/Jerusalem",
+        },
+      },
+    });
+
+    res.redirect("/events");
+  } catch (err) {
+    console.log(err);
+    res.send(layout("שגיאה", `<div class="card">❌ שגיאה בעדכון התור</div>`));
+  }
+});
+
+app.post("/events/:id/delete", async (req, res) => {
+  if (!isGoogleConnected()) {
+    return res.send(layout("שגיאה", `<div class="card">קודם צריך לחבר את גוגל</div>`));
+  }
+
+  try {
+    const calendar = getCalendarClient();
+    await calendar.events.delete({
+      calendarId: "primary",
+      eventId: req.params.id,
+    });
+
+    res.redirect("/events");
+  } catch (err) {
+    console.log(err);
+    res.send(layout("שגיאה", `<div class="card">❌ שגיאה במחיקת התור</div>`));
+  }
+});
+
+// =========================
+// CLIENTS
 // =========================
 app.get("/clients", (req, res) => {
   const q = (req.query.q || "").trim();
@@ -1128,9 +1190,6 @@ app.get("/clients", (req, res) => {
   res.send(layout("לקוחות", html));
 });
 
-// =========================
-// NEW CLIENT
-// =========================
 app.get("/clients/new", (req, res) => {
   const html = `
     <div class="section-title">לקוח חדש</div>
@@ -1214,9 +1273,6 @@ app.post("/clients/new", (req, res) => {
   res.redirect("/clients");
 });
 
-// =========================
-// EDIT CLIENT
-// =========================
 app.get("/clients/:id/edit", (req, res) => {
   const client = getClientById(req.params.id);
   if (!client) {
@@ -1305,9 +1361,6 @@ app.post("/clients/:id/edit", (req, res) => {
   res.redirect(`/clients/${client.id}`);
 });
 
-// =========================
-// DELETE CLIENT
-// =========================
 app.post("/clients/:id/delete", (req, res) => {
   let clients = getClients();
   clients = clients.filter((c) => c.id !== req.params.id);
@@ -1315,43 +1368,83 @@ app.post("/clients/:id/delete", (req, res) => {
   res.redirect("/clients");
 });
 
-// =========================
-// CLIENT PROFILE
-// =========================
 app.get("/clients/:id", (req, res) => {
   const client = getClientById(req.params.id);
   if (!client) {
     return res.send(layout("לא נמצא", `<div class="card">לקוח לא נמצא</div>`));
   }
 
-  let colorRows = "";
-  for (const item of client.colorHistory || []) {
-    colorRows += `
-      <div class="card" style="margin-bottom:10px">
-        <div class="color-note"><strong>מספר צבע:</strong> ${escapeHtml(item.colorNumber)}</div>
-        <div><strong>כמות:</strong> ${escapeHtml(item.amount)}</div>
-        <div><strong>חברה:</strong> ${escapeHtml(item.brand)}</div>
-        <div><strong>תאריך:</strong> ${escapeHtml(item.date)}</div>
-        <div><strong>הערות:</strong> ${escapeHtml(item.notes || "-")}</div>
-        <div style="margin-top:10px">
-          <form method="POST" action="/clients/${client.id}/color/${item.id}/delete" onsubmit="return confirm('למחוק רישום צבע?')">
-            <button class="btn btn-danger" type="submit">מחק רישום</button>
-          </form>
-        </div>
+  const colorTable =
+    (client.colorHistory || []).length > 0
+      ? `
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>תאריך</th>
+              <th>מספר צבע</th>
+              <th>כמות</th>
+              <th>חברה</th>
+              <th>הערות</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(client.colorHistory || [])
+              .map(
+                (item) => `
+                  <tr>
+                    <td>${escapeHtml(item.date)}</td>
+                    <td>${escapeHtml(item.colorNumber)}</td>
+                    <td>${escapeHtml(item.amount)}</td>
+                    <td>${escapeHtml(item.brand)}</td>
+                    <td>${escapeHtml(item.notes || "-")}</td>
+                    <td>
+                      <form method="POST" action="/clients/${client.id}/color/${item.id}/delete">
+                        <button class="btn btn-danger">מחק</button>
+                      </form>
+                    </td>
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
       </div>
-    `;
-  }
+    `
+      : `<div class="card empty">אין עדיין כרטסת צבע</div>`;
 
-  let treatmentRows = "";
-  for (const item of client.treatmentHistory || []) {
-    treatmentRows += `
-      <div class="card" style="margin-bottom:10px">
-        <div><strong>תאריך:</strong> ${escapeHtml(item.date)}</div>
-        <div><strong>טיפול:</strong> ${escapeHtml(item.service)}</div>
-        <div><strong>הערות:</strong> ${escapeHtml(item.notes || "-")}</div>
+  const treatmentRows =
+    (client.treatmentHistory || []).length > 0
+      ? `
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>תאריך</th>
+              <th>טיפול</th>
+              <th>הערות</th>
+              <th>צבע</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(client.treatmentHistory || [])
+              .map(
+                (item) => `
+                  <tr>
+                    <td>${escapeHtml(item.date || "-")}</td>
+                    <td>${escapeHtml(item.service || "-")}</td>
+                    <td>${escapeHtml(item.notes || "-")}</td>
+                    <td>${escapeHtml(item.colorId || "-")}</td>
+                  </tr>
+                `
+              )
+              .join("")}
+          </tbody>
+        </table>
       </div>
-    `;
-  }
+    `
+      : `<div class="card empty">אין עדיין היסטוריית טיפולים</div>`;
 
   const html = `
     <div class="section-title">כרטיס לקוח</div>
@@ -1376,7 +1469,10 @@ app.get("/clients/:id", (req, res) => {
           <a class="btn btn-light" href="/events/new">תור חדש</a>
           ${
             client.phone
-              ? `<a class="btn btn-green" href="${whatsappLink(client.phone, clientDisplayName(client))}" target="_blank">תזכורת וואטסאפ</a>`
+              ? `<a class="btn btn-green" href="${whatsappLink(
+                  client.phone,
+                  clientDisplayName(client)
+                )}" target="_blank">תזכורת וואטסאפ</a>`
               : ""
           }
         </div>
@@ -1417,28 +1513,17 @@ app.get("/clients/:id", (req, res) => {
     <div style="height:16px"></div>
 
     <div class="section-title">כרטסת צבע</div>
-    ${
-      (client.colorHistory || []).length
-        ? colorRows
-        : `<div class="card empty">אין עדיין רישומי צבע ללקוח הזה</div>`
-    }
+    ${colorTable}
 
     <div style="height:16px"></div>
 
     <div class="section-title">היסטוריית טיפולים</div>
-    ${
-      (client.treatmentHistory || []).length
-        ? treatmentRows
-        : `<div class="card empty">אין עדיין היסטוריית טיפולים</div>`
-    }
+    ${treatmentRows}
   `;
 
   res.send(layout(`כרטיס לקוח - ${clientDisplayName(client)}`, html));
 });
 
-// =========================
-// ADD COLOR HISTORY
-// =========================
 app.post("/clients/:id/color/new", (req, res) => {
   const clients = getClients();
   const client = clients.find((c) => c.id === req.params.id);
